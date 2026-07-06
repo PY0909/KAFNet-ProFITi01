@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Dataset (too large, managed separately)
+dataset/
+
+# Model checkpoints (too large)
+result/
+*.pt
+
+# Word docs (binary, not diffable)
+*.doc
+*.docx
+*.pdf
+
+# Archives
+*.zip
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+
+# AutoDL temp files
+autodl-tmp/
+*.log
+nohup.out
+
+# Claude local settings
+.claude/
