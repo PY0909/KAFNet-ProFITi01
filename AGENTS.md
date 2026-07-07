@@ -363,3 +363,44 @@ python -m pytest code/tests/test_experiment_framework.py -q
 - 实验协议：`统一对比实验方案.md`。
 - 项目总览：`README.md`。
 - 不新增平行说明文档；如果需要新专题，先在对应目录下创建，并在 `plan/progress.md` 中记录。
+
+## 9. Git 版本管理
+
+远程仓库：`https://github.com/PY0909/KAFNet-ProFITi01.git`
+
+### 标准工作流（本地改代码 → GitHub → AutoDL 拉取 → 跑实验）
+
+```bash
+# ===== 1. 本地改完代码后推送 =====
+cd "/Users/ppy/研/00提交资料汇总/new_work"
+git add -A
+git commit -m "<Phase X>: <改动摘要>"
+git push
+
+# ===== 2. AutoDL 服务器拉取最新代码 =====
+ssh -p 43676 root@connect.nmb2.seetacloud.com
+cd /root/autodl-tmp && source env.sh
+git pull
+
+# ===== 3. 跑实验 =====
+nohup python -u code/run_experiment.py ... > logs/run.log 2>&1 &
+
+# ===== 4. 下载结果到本地 =====
+# 在 Mac 终端执行：
+scp -P 43676 -r root@connect.nmb2.seetacloud.com:/root/autodl-tmp/result/<最新run_id>/metrics/ ~/Downloads/
+```
+
+### 注意事项
+
+- `dataset/` 和 `result/` 已加入 `.gitignore`，**不会通过 git 传输**。
+- 数据集只需上传一次：`scp -P 43676 -r dataset/ root@connect.nmb2.seetacloud.com:/root/autodl-tmp/`
+- 实验结果通过 `scp` 下载，不提交到 git。
+- 服务器首次 clone：`cd /root/autodl-tmp && git clone https://github.com/PY0909/KAFNet-ProFITi01.git .`
+
+### 提交示例
+
+```bash
+git commit -m "Phase 3: KST ProbFlow seed 2027 训练完成, MAE=0.41, CRPS=0.34"
+git commit -m "Phase 3: PatchTST-Gaussian 完整训练 50 epochs, MetroPT-3"
+git commit -m "fix: 修复 test_tep_data.py 硬编码路径"
+```
