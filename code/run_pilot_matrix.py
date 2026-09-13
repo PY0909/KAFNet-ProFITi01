@@ -49,7 +49,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--data-root", default=None)
     parser.add_argument("--result-root", default=None)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--device",
+        default="auto",
+        help="auto resolves to cuda when a GPU is visible, else cpu",
+    )
     return parser.parse_args()
 
 

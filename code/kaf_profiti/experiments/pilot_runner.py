@@ -112,7 +112,7 @@ SMOKE_GROUPS = {
 }
 
 
-def build_model(spec: PilotRunSpec, num_sensors: int, context_dim: int, options: Dict):
+def build_model(spec: PilotRunSpec, num_sensors: int, context_dim: int, options: Dict, device: str = "cpu"):
     """Instantiate the registered model for ``spec`` at protocol dimensions."""
 
     hidden_dim = spec.hidden_dim
@@ -131,7 +131,7 @@ def build_model(spec: PilotRunSpec, num_sensors: int, context_dim: int, options:
                 n_heads=int(options.get("n_heads", 2)),
                 preconv_dim=int(options.get("preconv_dim", 8)),
                 patch_lens=tuple(options.get("patch_lens", (12, 24, 48))),
-            )
+            ).to(device)
         point = importlib.import_module("kaf_profiti.baselines.point")
         return point.create_point_baseline(
             spec.model_id,
@@ -139,10 +139,10 @@ def build_model(spec: PilotRunSpec, num_sensors: int, context_dim: int, options:
             context_dim=context_dim,
             pred_len=spec.pred_len,
             hidden_dim=hidden_dim,
-        )
+        ).to(device)
     probabilistic = importlib.import_module("kaf_profiti.baselines.probabilistic")
     kwargs = dict(options) if spec.model_id == "kst_probflow" else {}
-    return probabilistic.create_probabilistic_baseline(
+    model = probabilistic.create_probabilistic_baseline(
         spec.model_id,
         num_sensors=num_sensors,
         context_dim=context_dim,
@@ -150,6 +150,7 @@ def build_model(spec: PilotRunSpec, num_sensors: int, context_dim: int, options:
         hidden_dim=hidden_dim,
         **kwargs,
     )
+    return model.to(device)
 
 
 class RealProtocolProvider:
@@ -288,11 +289,23 @@ def _build_provider(spec: PilotRunSpec, data_root: Path, result_root: Path) -> R
 # ---------------------------------------------------------------------------
 
 
-def _train_one_epoch(model, loader, device):
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+def _batch_to_device(batch, device):
+    """Move every tensor field of an ``IndustrialBatch`` to ``device``."""
+
+    if str(device) == "cpu":
+        return batch
+    moved = {
+        key: (value.to(device) if torch.is_tensor(value) else value)
+        for key, value in batch.__dict__.items()
+    }
+    return type(batch)(**moved)
+
+
+def _train_one_epoch(model, loader, optimizer, device):
     model.train()
     total, count = 0.0, 0
     for batch in loader:
+        batch = _batch_to_device(batch, device)
         optimizer.zero_grad()
         loss = model.loss(batch)
         loss.backward()
@@ -309,6 +322,7 @@ def _valid_score(model, loader, device, track, nsamples: int = 20):
     total, count = 0.0, 0
     with torch.no_grad():
         for batch in loader:
+            batch = _batch_to_device(batch, device)
             if track == "point":
                 errors = (model.predict_point(batch) - batch.y_flat).abs() * batch.mq_flat
                 total += float(errors.sum())
@@ -322,24 +336,22 @@ def _valid_score(model, loader, device, track, nsamples: int = 20):
     return total / max(count, 1.0)
 
 
-def _test_metrics(model, loader, track, nsamples: int = 20) -> Dict[str, object]:
+def _test_metrics(model, loader, device, track, nsamples: int = 20) -> Dict[str, object]:
     accumulator = GlobalMetricAccumulator()
     with torch.no_grad():
         for batch in loader:
+            batch = _batch_to_device(batch, device)
             prediction = model.predict_point(batch)
             accumulator.update_point(batch.y_flat, prediction, batch.mq_flat)
             if track == "probabilistic":
                 samples = model.sample_flat(batch, nsamples=nsamples)
                 model_object = model.model if hasattr(model, "model") else model
                 head = model_object.flow_head
+                nll_rows = model.batch_nll_rows(batch)
+                accumulator.update_nll(float(nll_rows.sum()), float(batch.mq_flat.sum()))
                 per_row = head.crps(batch.y_flat.unsqueeze(1), samples, batch.mq_flat)
                 accumulator.update_crps(
-                    float(per_row.sum() * 0 + _crps_row_sum(head, batch, samples)),
-                    float(batch.mq_flat.sum()),
-                )
-                rows = model.batch_nll_rows_for_validation(batch)
-                accumulator.update_nll(
-                    float((rows * batch.mq_flat.sum(dim=-1).clamp_min(1.0)).sum()),
+                    float((per_row * batch.mq_flat.sum(dim=-1).clamp_min(1.0)).sum()),
                     float(batch.mq_flat.sum()),
                 )
                 lower, upper = model.interval95_flat(batch)
@@ -355,41 +367,44 @@ def _test_metrics(model, loader, track, nsamples: int = 20) -> Dict[str, object]
     return metrics
 
 
-def _crps_row_sum(head, batch, samples) -> float:
-    """Per-row CRPS sums so the denominator stays the valid-position count."""
+def pilot_train_and_evaluate(model, loaders, spec: PilotRunSpec, provider, device: str = "cpu") -> Dict[str, object]:
+    """Default full pilot trainer: validation-selected checkpoint, one test.
 
-    per_row = head.crps(batch.y_flat.unsqueeze(1), samples, batch.mq_flat)
-    return float(per_row.sum() * float(batch.mq_flat.sum()) / max(float(per_row.numel()), 1)) if per_row.numel() else 0.0
+    All tensors and the model live on ``device``; the optimizer is created once
+    so AdamW moments persist across epochs.
+    """
 
-
-def pilot_train_and_evaluate(model, loaders, spec: PilotRunSpec, provider) -> Dict[str, object]:
-    """Default full pilot trainer: validation-selected checkpoint, one test."""
-
-    device = torch.device("cpu")
+    device = torch.device(device)
+    model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     history = []
     best_state, best_score = None, None
     train_start = time.perf_counter()
     for epoch in range(1, spec.epochs + 1):
-        train_loss = _train_one_epoch(model, loaders["train"], device)
+        train_loss = _train_one_epoch(model, loaders["train"], optimizer, device)
         score = _valid_score(model, loaders["valid"], device, spec.track)
         history.append({"epoch": epoch, "train_loss": train_loss, "valid_score": score})
         if best_score is None or score < best_score:
             best_score = score
-            best_state = {name: value.detach().clone() for name, value in model.state_dict().items()}
+            best_state = {
+                name: value.detach().to("cpu").clone()
+                for name, value in model.state_dict().items()
+            }
     train_time = time.perf_counter() - train_start
     if best_state is not None:
         model.load_state_dict(best_state)
-    metrics = _test_metrics(model, loaders["test"], spec.track)
+        model.to(device)
+    metrics = _test_metrics(model, loaders["test"], device, spec.track)
     checkpoint_bytes = _serialize_state(model.state_dict())
-    predictions = {}
     return {
         "history": history,
         "metrics": metrics,
         "checkpoint_bytes": checkpoint_bytes,
-        "predictions": predictions,
+        "predictions": {},
         "train_time_sec": train_time,
         "checkpoint_selection": "best_valid",
         "valid_selection_score": best_score,
+        "device": str(device),
     }
 
 
@@ -585,6 +600,8 @@ class PilotRunner:
         paths = resolve_runtime_paths(data_root, str(result_root), {})
         self.result_root = paths.output_root
         self.data_root = paths.data_root
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         self.matrices = list(matrices)
 
@@ -733,11 +750,29 @@ class PilotRunner:
                 continue
             try:
                 provider = factory(spec, self.data_root, self.result_root)
+                run_start = time.perf_counter()
                 model = build_model(
-                    spec, provider.num_sensors, provider.context_dim, provider.model_options
+                    spec,
+                    provider.num_sensors,
+                    provider.context_dim,
+                    provider.model_options,
+                    device=self.device,
                 )
-                outcome = trainer(model, provider.loaders(spec.batch_size), spec, provider)
+                outcome = trainer(model, provider.loaders(spec.batch_size), spec, provider, self.device)
                 self._persist_outcome(spec, outcome)
+                print(
+                    json.dumps(
+                        {
+                            "event": "run",
+                            "key": spec.key,
+                            "status": "completed",
+                            "device": str(outcome.get("device", self.device)),
+                            "elapsed_sec": round(time.perf_counter() - run_start, 1),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
                 self._write_manifest(spec, status="completed", error="", outcome=outcome)
                 completed.append(spec.key)
                 verified[spec.key] = {}
@@ -746,6 +781,13 @@ class PilotRunner:
                 failed.append(spec.key)
                 errors[spec.key] = f"{type(error).__name__}: {error}"
                 self._write_manifest(spec, status="failed", error=errors[spec.key], outcome=None)
+                print(
+                    json.dumps(
+                        {"event": "run", "key": spec.key, "status": "failed", "error": errors[spec.key]},
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
                 if not continue_on_error:
                     raise
         return {
@@ -811,6 +853,7 @@ class PilotRunner:
             "dataset": spec.dataset,
             "status": status,
             "error": error,
+            "device": str(outcome.get("device", self.device)) if outcome else self.device,
             "shared_artifacts": self._shared_artifacts(),
             "artifacts": artifacts,
             "test_metric_count": 1 if status == "completed" else 0,

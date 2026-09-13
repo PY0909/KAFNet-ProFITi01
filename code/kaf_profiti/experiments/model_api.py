@@ -312,6 +312,22 @@ class UnifiedGaussianModel(nn.Module):
         )
         return -((log_prob * batch.M_q).sum() / batch.M_q.sum().clamp_min(1.0))
 
+    def batch_nll_rows(self, batch: IndustrialBatch) -> Tensor:
+        """Per-row NLL sums over valid positions (``[B]``).
+
+        Rows are raw sums (not per-position averages) so
+        ``rows.sum() == batch_nll * mq_flat.sum()``; evaluators accumulate
+        ``rows.sum()`` against the global valid-position count.
+        """
+
+        mean, scale = self.gaussian_params(batch)
+        log_prob = (
+            -0.5 * ((batch.Y_q - mean) / scale).pow(2)
+            - torch.log(scale)
+            - 0.5 * math.log(2.0 * math.pi)
+        )
+        return -((log_prob * batch.M_q).sum(dim=(1, 2)))
+
     def sample_flat(
         self,
         batch: IndustrialBatch,
@@ -397,6 +413,14 @@ class UnifiedFlowModel(UnifiedGaussianModel):
         rows = self._flow_nll_rows(batch.y_flat, hidden, batch.mq_flat)
         row_counts = batch.mq_flat.sum(dim=-1).clamp_min(1.0)
         return (rows * row_counts).sum() / batch.mq_flat.sum().clamp_min(1.0)
+
+    def batch_nll_rows(self, batch: IndustrialBatch) -> Tensor:
+        """Per-row NLL sums; the flow's per-row means are re-expanded."""
+
+        hidden = self.flow_hidden(batch)
+        rows = self._flow_nll_rows(batch.y_flat, hidden, batch.mq_flat)
+        row_counts = batch.mq_flat.sum(dim=-1).clamp_min(1.0)
+        return rows * row_counts
 
     def sample_flat(
         self,

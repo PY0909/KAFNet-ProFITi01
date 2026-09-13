@@ -142,7 +142,7 @@ def test_dry_run_reports_shared_artifact_shas_and_new_training_count(tmp_path):
 def _make_loader_recorder():
     executed = []
 
-    def trainer(model, batches, spec, provider):
+    def trainer(model, batches, spec, provider, device="cpu"):
         executed.append(spec.key)
         return {
             "history": [{"epoch": 1}],
@@ -236,7 +236,7 @@ def test_continue_on_error_marks_only_the_failing_key(tmp_path):
     matrix_path = _tiny_point_matrix(tmp_path / "point.yaml")
     executed = []
 
-    def trainer(model, batches, spec, provider):
+    def trainer(model, batches, spec, provider, device="cpu"):
         executed.append(spec.key)
         if "gru_d" in spec.key:
             raise RuntimeError("synthetic training failure")
@@ -281,7 +281,7 @@ def test_continue_on_error_marks_only_the_failing_key(tmp_path):
 def test_baseline_first_gate_blocks_ours_until_every_baseline_key_completes(tmp_path):
     matrix_path = _tiny_point_matrix(tmp_path / "point.yaml")
 
-    def trainer(model, batches, spec, provider):
+    def trainer(model, batches, spec, provider, device="cpu"):
         if spec.family == "ours":
             raise AssertionError("ours model was scheduled before baselines completed")
         if "gru_d" in spec.key and "point_random_030" in spec.key:
@@ -325,7 +325,7 @@ def test_gate_uses_manifest_evidence_not_run_ids(tmp_path):
     )
     executed = []
 
-    def spy_trainer(model, batches, spec, provider):
+    def spy_trainer(model, batches, spec, provider, device="cpu"):
         executed.append(spec.key)
         return {
             "history": [],
@@ -466,6 +466,77 @@ def test_smoke_ours_group_requires_verified_baseline_smoke(tmp_path):
 
     counts = validate_smoke_report(report, expected_ready=2)
     assert counts == {"ready": 2, "failed": 0, "test_metrics": 0}
+
+
+def test_device_flag_reaches_built_model():
+    """The runner's device must reach build_model, not stop at the CLI."""
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        matrix_path = _tiny_point_matrix(Path(tmp) / "point.yaml")
+        spec = PilotRunner(
+            matrices=[load_matrix(matrix_path)], result_root=Path(tmp) / "result", device="meta"
+        ).expand()[0]
+        from kaf_profiti.experiments.pilot_runner import build_model
+
+        model = build_model(spec, 4, 3, {}, device="meta")
+        assert next(model.parameters()).device.type == "meta"
+
+
+def test_default_trainer_end_to_end_on_synthetic_loaders():
+    """The real train/valid/test trainer runs, selects by validation, and emits metrics."""
+
+    import tempfile
+
+    from kaf_profiti.experiments.pilot_runner import (
+        _with_smoke_dims,
+        build_model,
+        pilot_train_and_evaluate,
+    )
+
+    class _ListLoader:
+        def __init__(self, batches):
+            self._batches = batches
+
+        def __iter__(self):
+            return iter(self._batches)
+
+        def __len__(self):
+            return len(self._batches)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        matrix_path = _tiny_point_matrix(Path(tmp) / "point.yaml")
+        spec = _with_smoke_dims(
+            PilotRunner(
+                matrices=[load_matrix(matrix_path)],
+                result_root=Path(tmp) / "result",
+            ).expand()[0],
+            hidden_dim=8,
+            pred_len=3,
+        )
+        spec = type(spec)(**{**spec.__dict__, "epochs": 2})
+        provider = TinyProvider()
+        torch.manual_seed(spec.seed)
+        model = build_model(spec, provider.num_sensors, provider.context_dim, {}, device="cpu")
+        batches = provider.batches()
+        loaders = {
+            "train": _ListLoader([batches["train"], batches["valid"]]),
+            "valid": _ListLoader([batches["valid"]]),
+            "test": _ListLoader([batches["test"]]),
+        }
+
+        outcome = pilot_train_and_evaluate(model, loaders, spec, provider, device="cpu")
+
+        assert len(outcome["history"]) == 2
+        assert outcome["checkpoint_selection"] == "best_valid"
+        assert outcome["device"] == "cpu"
+        metrics = outcome["metrics"]
+        assert metrics["nll"] is None  # point track: no probabilistic metrics
+        import math
+
+        assert math.isfinite(metrics["mae"]) and math.isfinite(metrics["rmse"])
+        assert outcome["checkpoint_bytes"]
 
 
 def test_smoke_validator_rejects_failures_or_test_metrics(tmp_path):
