@@ -261,7 +261,7 @@ def build_report(
     return report
 
 
-_IDENTITY_SECTIONS = ("matrices", "protocol", "code_fingerprint", "dependencies", "dataset")
+_IDENTITY_SECTIONS = ("matrices", "protocol", "code_fingerprint", "dataset")
 
 
 def _drifted_leaf_paths(local_value, remote_value, prefix: str) -> list:
@@ -282,7 +282,12 @@ def _drifted_leaf_paths(local_value, remote_value, prefix: str) -> list:
 
 
 def compare_reports(local: Dict[str, object], remote: Dict[str, object]) -> None:
-    """Strict on identity, silent on environment names and resolved paths."""
+    """Strict on identity, silent on environment names, paths, and package builds.
+
+    Dependency versions are recorded but not compared: every pilot run executes
+    inside the single AutoDL environment, so only that environment's internal
+    lock (requirement.txt) matters for fairness.
+    """
 
     drifts = []
     if local.get("git", {}).get("commit_sha") != remote.get("git", {}).get("commit_sha"):
