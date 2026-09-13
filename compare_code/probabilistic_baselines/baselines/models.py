@@ -5,6 +5,7 @@ import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 
+from kaf_profiti.experiments.model_api import UnifiedFlowModel, UnifiedGaussianModel
 from kaf_profiti.models.kafnet_encoder import KAFNetEncoder
 from kaf_profiti.models.profiti_flow_head import ProFITiFlowHead
 from kaf_profiti.models.query_condition_adapter import QueryConditionAdapter
@@ -46,7 +47,17 @@ def _masked_summary(x: Tensor, mask: Tensor) -> Tensor:
     return torch.cat([mean, std, last, missing], dim=-1)
 
 
-class BaseGaussianForecastModel(nn.Module):
+class BaseGaussianForecastModel(UnifiedGaussianModel):
+    """Diagonal Gaussian baselines that also speak the unified pilot API.
+
+    ``forward`` keeps the legacy call signature for the standalone trainer;
+    ``gaussian_params`` adapts it to the unified batch contract so
+    ``predict_point``/``batch_nll``/``sample_flat``/``interval95_flat``/``loss``
+    all come from one shared distribution with the unified scale
+    parameterization (``softplus + min_scale``), NLL denominator and
+    ``mean +/- Z95 * scale`` interval.
+    """
+
     model_name = "base"
 
     def __init__(
@@ -74,6 +85,11 @@ class BaseGaussianForecastModel(nn.Module):
         t_q: Tensor = None,
     ) -> Tuple[Tensor, Tensor]:
         raise NotImplementedError
+
+    def gaussian_params(self, batch) -> Tuple[Tensor, Tensor]:
+        return self.forward(
+            batch.X_obs, batch.M_obs, batch.context, t_obs=batch.T_obs, t_q=batch.T_q
+        )
 
     def nll(self, y: Tensor, mean: Tensor, scale: Tensor, mask: Tensor = None) -> Tensor:
         if mask is None:
@@ -125,6 +141,21 @@ class BaseGaussianForecastModel(nn.Module):
 
 class PatchTSTGaussian(BaseGaussianForecastModel):
     model_name = "patchtst_gaussian"
+
+    IMPLEMENTATION = "adapted"
+    SOURCE_IDENTITY = (
+        "PatchTST (Nie et al., 2023) patching with a Transformer encoder over "
+        "patch tokens plus an independent Gaussian head; adapted: a compact "
+        "per-sensor patch Transformer (channel-stacked patch tokens, few "
+        "encoder layers) instead of the full channel-independent PatchTST "
+        "backbone with RevIN and decomposition"
+    )
+    REQUIRES_TIME_INPUT = False
+    ADAPTER = (
+        "regular-grid assumption: features are concat(X*M, M) on the "
+        "observation index grid with no imputation; missing positions enter as "
+        "zeros with the mask channel; real timestamps are ignored"
+    )
 
     def __init__(
         self,
@@ -189,6 +220,22 @@ class PatchTSTGaussian(BaseGaussianForecastModel):
 
 class ODERNNGaussian(BaseGaussianForecastModel):
     model_name = "ode_rnn"
+
+    IMPLEMENTATION = "adapted"
+    SOURCE_IDENTITY = (
+        "ODE-RNN (Rubanova et al., 2019, latent ODE): the hidden state evolves "
+        "by the real elapsed time between historical observations and up to "
+        "the forecast origin, with a GRUCell update at each observation step, "
+        "plus an independent Gaussian head; adapted: fixed-count Euler "
+        "integration with a learned tanh vector field instead of a black-box "
+        "adjoint ODE solver"
+    )
+    REQUIRES_TIME_INPUT = True
+    ADAPTER = (
+        "native sparse input: values enter as X*M with the mask as an input "
+        "channel; the hidden state integrates over real T_obs gaps and the gap "
+        "to the forecast origin T_q[:, 0]; no other future field is read"
+    )
 
     def __init__(
         self,
@@ -354,8 +401,36 @@ class KAFNetGaussian(BaseGaussianForecastModel):
         return self._shape_output(raw, batch_size)
 
 
-class ProFITiGaussian(BaseGaussianForecastModel):
+class ProFITiGaussian(UnifiedFlowModel, BaseGaussianForecastModel):
+    """ProFITi conditional-flow baseline on the unified pilot API.
+
+    NLL and samples come from the same trained ``ProFITiFlowHead`` flow: the
+    unified ``batch_nll`` re-weights the flow's per-row joint NLL to the
+    shared valid-position denominator, and ``predict_point``/
+    ``interval95_flat``/``sample_flat`` draw from the identical flow (seeded
+    generators make the point prediction deterministic). The legacy
+    ``forward``/``nll``/``sample`` keep their cached-hidden contract for the
+    standalone trainer and are never used by the unified path.
+    """
+
     model_name = "profiti"
+
+    IMPLEMENTATION = "adapted_profiti"
+    SOURCE_IDENTITY = (
+        "ProFITi (Yalavarthi et al., 2024): probabilistic forecasting of "
+        "irregular time series via a conditional normalizing flow over the "
+        "query vector (triangular attention flow trained with joint NLL); "
+        "adapted_profiti: the project's ProFITiFlowHead flow and "
+        "QueryConditionAdapter conditioning driven by a GRU observation "
+        "encoder, instead of the original bidirectional encoder stack; NLL and "
+        "samples come from this same trained flow"
+    )
+    REQUIRES_TIME_INPUT = True
+    ADAPTER = (
+        "native sparse input: features are concat(X*M, M, T_obs, context) so "
+        "the model sees real observation timestamps; query conditioning uses "
+        "T_q only as the forecast time grid"
+    )
 
     def __init__(
         self,
@@ -422,6 +497,27 @@ class ProFITiGaussian(BaseGaussianForecastModel):
         flat_mask = torch.ones(hidden.shape[:2], device=hidden.device)
         samples = self.flow_head.sample(hidden, flat_mask, nsamples=nsamples)
         return samples.view(x_obs.shape[0], int(nsamples), self.pred_len, self.num_sensors)
+
+    # -- unified flow API (CH2.5-P02-T03) ---------------------------------
+
+    def flow_hidden(self, batch) -> Tensor:
+        # Fresh conditioning per call: the unified path must not depend on the
+        # legacy cached ``_last_hidden``.
+        return self._hidden(
+            batch.X_obs, batch.M_obs, context=batch.context, t_obs=batch.T_obs, t_q=batch.T_q
+        )
+
+    def _flow_nll_rows(self, y_flat: Tensor, hidden: Tensor, mq_flat: Tensor) -> Tensor:
+        return self.flow_head.nll(y_flat, hidden, mq_flat)
+
+    def _flow_sample(
+        self,
+        hidden: Tensor,
+        mq_flat: Tensor,
+        nsamples: int,
+        generator: torch.Generator = None,
+    ) -> Tensor:
+        return self.flow_head.sample(hidden, mq_flat, nsamples=nsamples, generator=generator)
 
 
 def create_baseline_model(

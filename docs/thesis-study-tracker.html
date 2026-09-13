@@ -1,0 +1,2136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>论文 30 天学习打卡</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js" defer></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f5f2;
+      --surface: #ffffff;
+      --surface-2: #e9eee9;
+      --text: #17221c;
+      --muted: #647068;
+      --border: #d5ddd7;
+      --green: #246b4a;
+      --green-soft: #dcebe2;
+      --blue: #32658c;
+      --blue-soft: #dce9f2;
+      --amber: #a76419;
+      --amber-soft: #f4e7d4;
+      --rust: #a4472f;
+      --rust-soft: #f2dfda;
+      --charcoal: #223029;
+      --danger: #a33c32;
+      --shadow: 0 8px 24px rgba(26, 43, 33, 0.08);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid rgba(50, 101, 140, 0.28);
+      outline-offset: 2px;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+    }
+
+    .masthead {
+      background: var(--charcoal);
+      color: #f7faf8;
+      border-bottom: 4px solid var(--green);
+    }
+
+    .masthead-inner,
+    .main-content {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .masthead-inner {
+      padding: 22px 0 18px;
+    }
+
+    .topline {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .title-block {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      margin: 0 0 3px;
+      color: #b9c9bf;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.25;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .date-range {
+      margin: 5px 0 0;
+      color: #d3ddd7;
+      font-size: 14px;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn,
+    .icon-btn,
+    .tab-button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+    }
+
+    .btn {
+      display: inline-flex;
+      min-height: 38px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+
+    .btn:hover,
+    .icon-btn:hover,
+    .tab-button:hover {
+      border-color: #9eaba2;
+      background: #f7faf8;
+    }
+
+    .btn-primary {
+      border-color: var(--green);
+      background: var(--green);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: #1e5c40;
+      border-color: #1e5c40;
+    }
+
+    .btn-dark {
+      border-color: #52635a;
+      background: transparent;
+      color: #f7faf8;
+    }
+
+    .btn-dark:hover {
+      background: #314239;
+      border-color: #77877e;
+    }
+
+    .btn-danger {
+      color: #f8deda;
+    }
+
+    .btn svg,
+    .icon-btn svg,
+    .tab-button svg {
+      width: 17px;
+      height: 17px;
+      flex: 0 0 auto;
+      stroke-width: 2;
+    }
+
+    .save-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 15px;
+      color: #bdcbc2;
+      font-size: 13px;
+    }
+
+    .save-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #76ba8d;
+    }
+
+    .main-content {
+      padding: 24px 0 52px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      min-height: 112px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .stat-value {
+      margin-top: 4px;
+      font-size: 28px;
+      line-height: 1.2;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-context {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .roadmap-section {
+      margin-top: 18px;
+      padding: 18px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-heading-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    h2,
+    h3 {
+      margin: 0;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 19px;
+    }
+
+    h3 {
+      font-size: 16px;
+    }
+
+    .section-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: 5fr 6fr 6fr 10fr 3fr;
+      gap: 5px;
+      min-height: 88px;
+    }
+
+    .roadmap-stage {
+      position: relative;
+      min-width: 0;
+      padding: 11px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 6px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .roadmap-stage::after {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      width: var(--stage-progress, 0%);
+      max-width: calc(100% - 16px);
+      height: 4px;
+      border-radius: 2px;
+      background: currentColor;
+      content: "";
+      opacity: 0.72;
+    }
+
+    .roadmap-stage.foundation {
+      background: var(--green-soft);
+      color: #194d36;
+    }
+
+    .roadmap-stage.chapter1 {
+      background: var(--blue-soft);
+      color: #234f70;
+    }
+
+    .roadmap-stage.chapter2 {
+      background: var(--amber-soft);
+      color: #7b4812;
+    }
+
+    .roadmap-stage.chapter3 {
+      background: var(--rust-soft);
+      color: #803522;
+    }
+
+    .roadmap-stage.wrap {
+      background: #e4e6e2;
+      color: #424b45;
+    }
+
+    .stage-dates {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .stage-percent {
+      display: block;
+      margin-top: 8px;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-top: 22px;
+      padding: 4px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface-2);
+    }
+
+    .tab-button {
+      display: inline-flex;
+      min-width: 106px;
+      min-height: 40px;
+      flex: 1 0 auto;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-color: transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .tab-button[aria-selected="true"] {
+      border-color: var(--border);
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 2px 7px rgba(26, 43, 33, 0.08);
+    }
+
+    .view-panel {
+      display: none;
+      padding-top: 22px;
+    }
+
+    .view-panel.is-active {
+      display: block;
+    }
+
+    .today-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .day-sheet,
+    .checkin-sheet {
+      min-width: 0;
+      border-top: 3px solid var(--green);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .sheet-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 18px 15px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sheet-header-copy {
+      min-width: 0;
+    }
+
+    .day-meta {
+      margin: 0 0 3px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .day-title {
+      font-size: 21px;
+      line-height: 1.35;
+    }
+
+    .day-nav {
+      display: flex;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      width: 38px;
+      height: 38px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+
+    .icon-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.38;
+    }
+
+    .sheet-section {
+      padding: 17px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sheet-section:last-child {
+      border-bottom: 0;
+    }
+
+    .subheading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .subheading svg {
+      width: 17px;
+      height: 17px;
+      color: var(--green);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 0;
+    }
+
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 118px 92px minmax(0, 1fr);
+      gap: 12px;
+      padding: 11px 0;
+      border-bottom: 1px solid #e7ebe8;
+    }
+
+    .timeline-row:last-child {
+      border-bottom: 0;
+    }
+
+    .timeline-time {
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+
+    .timeline-kind {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .learning-list,
+    .deliverable-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .learning-list li,
+    .deliverable-list li {
+      margin: 5px 0;
+    }
+
+    .task-list {
+      display: grid;
+      gap: 0;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 11px 0;
+      border-bottom: 1px solid #e7ebe8;
+    }
+
+    .task-row:last-child {
+      border-bottom: 0;
+    }
+
+    .task-row input {
+      width: 18px;
+      height: 18px;
+      margin: 3px 0 0;
+      accent-color: var(--green);
+    }
+
+    .task-row label {
+      cursor: pointer;
+    }
+
+    .task-row input:checked + label {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+
+    .output-box {
+      padding: 12px 14px;
+      border-left: 4px solid var(--amber);
+      background: var(--amber-soft);
+      color: #5e3c16;
+    }
+
+    .checkin-sheet {
+      position: sticky;
+      top: 16px;
+      border-top-color: var(--blue);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 7px;
+      font-weight: 500;
+    }
+
+    .form-hint {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 400;
+    }
+
+    .form-control {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    input.form-control {
+      height: 42px;
+      padding: 8px 11px;
+    }
+
+    textarea.form-control {
+      min-height: 146px;
+      resize: vertical;
+      padding: 10px 11px;
+    }
+
+    .day-progress-track,
+    .progress-track {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 3px;
+      background: var(--surface-2);
+    }
+
+    .day-progress-track {
+      height: 9px;
+      margin: 7px 0 14px;
+    }
+
+    .progress-track {
+      height: 7px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      transition: width 180ms ease;
+    }
+
+    .day-progress-text {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .checkin-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .calendar-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 15px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .calendar-spacer {
+      min-height: 1px;
+    }
+
+    .calendar-day {
+      display: flex;
+      min-height: 128px;
+      min-width: 0;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 11px;
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--phase-color);
+      border-radius: var(--radius);
+      background: var(--surface);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .calendar-day:hover {
+      border-right-color: #9eaba2;
+      border-bottom-color: #9eaba2;
+      border-left-color: #9eaba2;
+      box-shadow: var(--shadow);
+    }
+
+    .calendar-day.is-done {
+      background: #f0f6f2;
+    }
+
+    .calendar-day-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .calendar-date {
+      font-size: 19px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .calendar-weekday {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .calendar-title {
+      display: -webkit-box;
+      min-height: 44px;
+      margin-top: 7px;
+      overflow: hidden;
+      font-size: 13px;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .calendar-progress {
+      margin-top: auto;
+      padding-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chapter-list,
+    .experiment-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .chapter-row,
+    .experiment-row {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr) 120px;
+      gap: 20px;
+      align-items: center;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .chapter-row:first-child,
+    .experiment-row:first-child {
+      border-top: 1px solid var(--border);
+    }
+
+    .row-kicker {
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .row-details {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .row-progress-value {
+      margin-bottom: 5px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+
+    .experiment-status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      padding: 4px 9px;
+      border-radius: 5px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .experiment-status.done {
+      background: var(--green-soft);
+      color: #194d36;
+    }
+
+    .experiment-status.active {
+      background: var(--amber-soft);
+      color: #71420f;
+    }
+
+    .empty-message {
+      padding: 22px 0;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 900px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .roadmap {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .roadmap-stage.chapter3 {
+        grid-column: span 2;
+      }
+
+      .today-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .checkin-sheet {
+        position: static;
+      }
+
+      .calendar-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .calendar-spacer {
+        display: none;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .masthead-inner,
+      .main-content {
+        width: min(100% - 20px, 1180px);
+      }
+
+      .topline {
+        flex-direction: column;
+      }
+
+      .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .tab-button {
+        min-width: 0;
+        gap: 5px;
+        padding: 8px 6px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .stat-card {
+        min-height: 104px;
+        padding: 13px;
+      }
+
+      .stat-value {
+        font-size: 23px;
+      }
+
+      .roadmap {
+        grid-template-columns: 1fr;
+      }
+
+      .roadmap-stage.chapter3 {
+        grid-column: auto;
+      }
+
+      .timeline-row {
+        grid-template-columns: 105px minmax(0, 1fr);
+      }
+
+      .timeline-kind {
+        display: none;
+      }
+
+      .calendar-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .calendar-day {
+        min-height: 118px;
+      }
+
+      .chapter-row,
+      .experiment-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .row-progress-value {
+        text-align: left;
+      }
+
+      .section-heading-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="masthead">
+      <div class="masthead-inner">
+        <div class="topline">
+          <div class="title-block">
+            <p class="eyebrow">硕士论文 · 30 天学习与写作计划</p>
+            <h1>从零基础到第一至第三章初稿</h1>
+            <p class="date-range">2026.08.02—08.31 · 每日目标 4.5 小时</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-dark" id="import-button" type="button">
+              <i data-lucide="upload"></i>
+              导入
+            </button>
+            <input class="sr-only" id="import-file" type="file" accept="application/json">
+            <button class="btn btn-dark" id="export-button" type="button">
+              <i data-lucide="download"></i>
+              导出
+            </button>
+            <button class="btn btn-dark btn-danger" id="reset-button" type="button">
+              <i data-lucide="rotate-ccw"></i>
+              重置
+            </button>
+          </div>
+        </div>
+        <div class="save-status" aria-live="polite">
+          <span class="save-dot"></span>
+          <span id="save-status-text">本地记录已就绪</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="stats-grid" aria-label="总体进度">
+        <article class="stat-card">
+          <div class="stat-label">任务完成率</div>
+          <div class="stat-value" id="stat-completion">0%</div>
+          <div class="stat-context" id="stat-task-context">0 / 0 项</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">累计学习</div>
+          <div class="stat-value" id="stat-hours">0 h</div>
+          <div class="stat-context">目标 135 小时</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">连续完成</div>
+          <div class="stat-value" id="stat-streak">0 天</div>
+          <div class="stat-context">按整日任务计算</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">当前阶段</div>
+          <div class="stat-value" id="stat-phase">基础补课</div>
+          <div class="stat-context" id="stat-phase-context">建立知识地图</div>
+        </article>
+      </section>
+
+      <section class="roadmap-section" aria-labelledby="roadmap-heading">
+        <div class="section-heading-row">
+          <h2 id="roadmap-heading">月度路线</h2>
+          <span class="section-note">学习、写作和实验按依赖关系推进</span>
+        </div>
+        <div class="roadmap" id="roadmap"></div>
+      </section>
+
+      <nav class="tabs" aria-label="计划视图">
+        <button class="tab-button" type="button" data-view="today" aria-selected="true">
+          <i data-lucide="sun"></i>
+          今日
+        </button>
+        <button class="tab-button" type="button" data-view="calendar" aria-selected="false">
+          <i data-lucide="calendar-days"></i>
+          日历
+        </button>
+        <button class="tab-button" type="button" data-view="chapters" aria-selected="false">
+          <i data-lucide="book-open"></i>
+          章节
+        </button>
+        <button class="tab-button" type="button" data-view="experiments" aria-selected="false">
+          <i data-lucide="flask-conical"></i>
+          实验
+        </button>
+      </nav>
+
+      <section class="view-panel is-active" id="view-today" data-view="today"></section>
+      <section class="view-panel" id="view-calendar" data-view="calendar"></section>
+      <section class="view-panel" id="view-chapters" data-view="chapters"></section>
+      <section class="view-panel" id="view-experiments" data-view="experiments"></section>
+    </main>
+  </div>
+
+  <script id="plan-data" type="application/json">
+  {
+    "targetHours": 135,
+    "phases": [
+      {
+        "id": "foundation",
+        "label": "基础补课",
+        "dates": "8.2—8.6",
+        "goal": "建立知识地图",
+        "color": "#246b4a"
+      },
+      {
+        "id": "chapter1",
+        "label": "第一章",
+        "dates": "8.7—8.12",
+        "goal": "形成问题与创新链",
+        "color": "#32658c"
+      },
+      {
+        "id": "chapter2",
+        "label": "第二章",
+        "dates": "8.13—8.18",
+        "goal": "补齐理论与指标",
+        "color": "#a76419"
+      },
+      {
+        "id": "chapter3",
+        "label": "第三章与实验",
+        "dates": "8.19—8.28",
+        "goal": "表示方法与独立验证",
+        "color": "#a4472f"
+      },
+      {
+        "id": "wrap",
+        "label": "统稿收口",
+        "dates": "8.29—8.31",
+        "goal": "交付三章 V1",
+        "color": "#59635d"
+      }
+    ],
+    "days": [
+      {
+        "date": "2026-08-02",
+        "phaseId": "foundation",
+        "title": "建立论文全景地图",
+        "learning": ["读懂三项研究问题及其依赖关系", "区分主任务、辅助风险任务和非主任务", "认识第三、第四、第五章的证据边界"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "精读《毕业论文研究边界与总体方案》第 2、4、11 节"},
+          {"time": "09:45–11:15", "kind": "梳理", "detail": "画出观测表示—概率预测—风险校准的三层关系"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "用自己的话写 500 字课题说明，不复制原文"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "记录不理解的 10 个术语并按优先级排序"}
+        ],
+        "tasks": ["完成三层研究逻辑手绘或电子图", "写出课题研究对象、输入、输出和限制", "建立个人术语表，至少记录 10 个术语", "检查本月目标是否聚焦第一至第三章"],
+        "output": "一页论文全景图 + 500 字课题说明 + 术语表 V1"
+      },
+      {
+        "date": "2026-08-03",
+        "phaseId": "foundation",
+        "title": "多元时间序列入门",
+        "learning": ["时间步、变量、样本和滑动窗口", "train、validation、test 的职责", "归一化和数据泄露的基本概念"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "学习多元时间序列、监督学习和预测窗口"},
+          {"time": "09:45–11:15", "kind": "练习", "detail": "用 MetroPT-3 示例标出 L、Lp、N、B 的含义"},
+          {"time": "14:00–15:30", "kind": "代码", "detail": "阅读数据 reader 和 collate 的输入输出，不改代码"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "解释为什么必须先划分再生成窗口"}
+        ],
+        "tasks": ["画出一个历史窗口与未来窗口示意图", "写明 train、validation、test 各自用途", "列出归一化泄露的两个错误例子", "记录代码中数据批次的主要字段"],
+        "output": "时间序列窗口说明页 + 数据划分防泄露清单"
+      },
+      {
+        "date": "2026-08-04",
+        "phaseId": "foundation",
+        "title": "异步观测与缺失机制入门",
+        "learning": ["mask、time gap、事件序列与规则网格", "随机缺失、通道降采样和连续离线", "为什么缺失类型不默认作为模型输入"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "学习 MCAR、采样异步、离线缺失的区别"},
+          {"time": "09:45–11:15", "kind": "对比", "detail": "比较插值、前向填充、mask 建模和连续时间路线"},
+          {"time": "14:00–15:30", "kind": "协议", "detail": "阅读统一实验方案中的缺失构造与固定 mask 规则"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "写出人工异步实验能说明和不能说明什么"}
+        ],
+        "tasks": ["完成四类缺失处理方法对比表", "用一个例子说明插值如何制造伪观测", "明确主实验模型输入不包含缺失原因标签", "写出三类缺失机制的工业解释"],
+        "output": "缺失机制与处理方法对比表 V1"
+      },
+      {
+        "date": "2026-08-05",
+        "phaseId": "foundation",
+        "title": "概率预测与不确定性入门",
+        "learning": ["点预测、参数分布、分位数和预测样本", "似然、NLL、CRPS 的直观含义", "边际不确定性与跨变量相关性的区别"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "从高斯分布理解均值、尺度和预测区间"},
+          {"time": "09:45–11:15", "kind": "公式", "detail": "手写 NLL、分位数和 95% 区间的基本定义"},
+          {"time": "14:00–15:30", "kind": "对比", "detail": "整理点预测、独立高斯、边际概率、联合概率四级对照"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "解释 PICP 高为什么不一定代表模型更好"}
+        ],
+        "tasks": ["写出 MAE 与 NLL 评价对象的区别", "完成概率输出形式对比表", "用自己的话解释 CRPS", "记录三个仍不理解的概率概念"],
+        "output": "概率预测概念卡片 + 四级模型对照表"
+      },
+      {
+        "date": "2026-08-06",
+        "phaseId": "foundation",
+        "title": "风险评估与校准入门",
+        "learning": ["AUROC、AUPRC、F1、Precision、Recall", "ECE 与可靠性曲线", "validation-only Platt calibration 和 q=0.95"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "学习分类排序指标与阈值指标的区别"},
+          {"time": "09:45–11:15", "kind": "案例", "detail": "用 27 个正类窗口的场景理解类别不平衡"},
+          {"time": "14:00–15:30", "kind": "协议", "detail": "画出 validation 拟合校准器并固定应用于 test 的流程"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "完成基础阶段 20 题自测并补齐术语表"}
+        ],
+        "tasks": ["画出风险分数—校准—阈值—报警链", "解释为什么不能使用 test best F1", "区分 AUROC 与 AUPRC 的适用场景", "完成术语表 V2，至少 25 个术语"],
+        "output": "风险校准流程图 + 基础知识自测记录"
+      },
+      {
+        "date": "2026-08-07",
+        "phaseId": "chapter1",
+        "title": "搭建第一章文献地图",
+        "learning": ["工业状态预测与 PHM 的研究对象", "剩余寿命、状态预测和故障诊断的差异", "研究现状的范式化组织方法"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "阅读", "detail": "精读文献阅读报告中工业状态预测部分"},
+          {"time": "09:45–11:15", "kind": "整理", "detail": "按任务、输入假设、输出和局限整理代表文献"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "形成 1.2.1 的段落级提纲"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "核对引用是否在文献汇总表中存在"}
+        ],
+        "tasks": ["选择 8–12 篇状态预测代表文献", "按方法范式完成文献矩阵", "写出每类方法解决了什么", "形成 1.2.1 的 6–8 个段落角色"],
+        "output": "工业状态预测文献矩阵 + 1.2.1 段落提纲"
+      },
+      {
+        "date": "2026-08-08",
+        "phaseId": "chapter1",
+        "title": "梳理异步与缺失研究现状",
+        "learning": ["插值与填充路线", "GRU-D 等缺失感知路线", "ODE-RNN、mTAN、GraFITi 等连续时间或事件路线"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "阅读", "detail": "阅读不规则时间序列与缺失建模综述笔记"},
+          {"time": "09:45–11:15", "kind": "整理", "detail": "按规则化、缺失感知、连续时间、事件模型分类"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "形成 1.2.2 的论证链和引用槽位"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "检查不足表述是否限定在本文场景"}
+        ],
+        "tasks": ["选择 10–15 篇异步建模代表文献", "完成四类方法的优点、假设和边界", "避免使用完全忽略、无法处理等绝对句", "形成 1.2.2 段落提纲"],
+        "output": "异步缺失方法矩阵 + 1.2.2 段落提纲"
+      },
+      {
+        "date": "2026-08-09",
+        "phaseId": "chapter1",
+        "title": "梳理概率预测与风险研究现状",
+        "learning": ["高斯、分位数与生成式概率预测", "联合分布和相关结构建模", "风险评分与概率校准"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "阅读", "detail": "阅读概率预测、校准与风险文献笔记"},
+          {"time": "09:45–11:15", "kind": "整理", "detail": "建立点预测—边际概率—联合概率—风险校准链"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "形成 1.2.3 的段落结构和关键引用"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "检查联合概率和风险任务没有混写"}
+        ],
+        "tasks": ["选择 10–15 篇概率与校准代表文献", "完成四级方法路线表", "写出概率质量不等于风险可用性的原因", "形成 1.2.3 段落提纲"],
+        "output": "概率预测与风险文献矩阵 + 1.2.3 段落提纲"
+      },
+      {
+        "date": "2026-08-10",
+        "phaseId": "chapter1",
+        "title": "撰写 1.1 与 1.2.1",
+        "learning": ["背景段落如何从工业问题落到研究对象", "文献综述如何承认已有方法价值", "事实、判断和本文推断的区别"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "构思", "detail": "按背景—矛盾—任务写 1.1 详细提纲"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "完成 1.1 研究背景及意义初稿"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "完成 1.2.1 工业状态预测研究现状初稿"},
+          {"time": "20:00–20:30", "kind": "审校", "detail": "核对引用位置和术语首次出现"}
+        ],
+        "tasks": ["完成 1.1 初稿 1800–2200 字", "完成 1.2.1 初稿 1400–1800 字", "每段只保留一个中心判断", "核验本日新增引用"],
+        "output": "第一章 1.1 与 1.2.1 初稿"
+      },
+      {
+        "date": "2026-08-11",
+        "phaseId": "chapter1",
+        "title": "撰写 1.2.2 与 1.2.3",
+        "learning": ["按方法范式组织综述", "如何从已有价值过渡到目标缺口", "研究现状与第二章理论基础的分工"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "构思", "detail": "复核两节提纲和引用槽位"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "完成 1.2.2 异步缺失研究现状"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "完成 1.2.3 概率预测与风险研究现状"},
+          {"time": "20:00–20:30", "kind": "审校", "detail": "删掉作者罗列和无边界的负面评价"}
+        ],
+        "tasks": ["完成 1.2.2 初稿 1600–2000 字", "完成 1.2.3 初稿 1600–2000 字", "检查文献范式与三项问题对应关系", "核验引用编号与文献表"],
+        "output": "第一章 1.2.2 与 1.2.3 初稿"
+      },
+      {
+        "date": "2026-08-12",
+        "phaseId": "chapter1",
+        "title": "完成第一章闭环",
+        "learning": ["研究问题与创新点的一一对应", "目标语言与结果语言的区别", "章节组织结构的承接写法"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "写作", "detail": "完成 1.3 三个主要问题"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "完成 1.4 研究内容与三项创新"},
+          {"time": "14:00–15:30", "kind": "统稿", "detail": "完成 1.5 并通读第一章"},
+          {"time": "20:00–20:30", "kind": "检查", "detail": "运行引用、术语和结构检查"}
+        ],
+        "tasks": ["完成 1.3、1.4、1.5 初稿", "保证三个问题对应三项创新和三章", "删除未经实验支持的提升结论", "形成第一章问题清单并修订"],
+        "output": "第一章 V1，建议总量 7000–9000 字"
+      },
+      {
+        "date": "2026-08-13",
+        "phaseId": "chapter2",
+        "title": "补齐多元时间序列理论",
+        "learning": ["多元序列符号、监督预测和条件预测", "卷积、循环、注意力和图模型的基本作用", "时间依赖与变量依赖的区别"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "学习多元时间序列形式化与常见模型"},
+          {"time": "09:45–11:15", "kind": "公式", "detail": "建立全文统一符号表"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 2.1 的结构提纲和核心定义"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "解释每类模型分别建模哪一种依赖"}
+        ],
+        "tasks": ["完成符号表 V1", "画出时间依赖和变量依赖示意", "整理 2.1 的理论边界", "写出 2.1 初稿不少于 1000 字"],
+        "output": "全文符号表 V1 + 2.1 初稿"
+      },
+      {
+        "date": "2026-08-14",
+        "phaseId": "chapter2",
+        "title": "补齐异步表示理论",
+        "learning": ["missing-aware、continuous-time 与 event-based 方法", "时间核聚合和可学习规整表示", "多尺度历史与工况条件"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概念", "detail": "复习 GRU-D、ODE-RNN、mTAN 的核心思想"},
+          {"time": "09:45–11:15", "kind": "方法", "detail": "学习 KAF 时间核池化和变量表示概念"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 2.2 与 2.3 的理论骨架"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "说明第二章理论与第三章方法的接口"}
+        ],
+        "tasks": ["完成异步方法理论对照表", "解释时间核聚合如何处理不规则观测", "写出 2.2 初稿", "写出 2.3 初稿框架"],
+        "output": "2.2 初稿 + 2.3 方法基础框架"
+      },
+      {
+        "date": "2026-08-15",
+        "phaseId": "chapter2",
+        "title": "补齐条件概率与相关结构理论",
+        "learning": ["条件分布、边际分布和联合分布", "Normalizing Flow 的可逆变换直觉", "copula 或低秩相关结构的作用"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "概率", "detail": "复习条件概率、对数似然和采样"},
+          {"time": "09:45–11:15", "kind": "方法", "detail": "学习条件流与相关结构的基本概念"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 2.4 条件生成式概率预测框架"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "检查是否把相关采样误写成严格联合密度"}
+        ],
+        "tasks": ["画出条件概率预测数据流", "区分边际质量与联合质量", "完成 2.4 初稿 1200–1600 字", "记录联合建模证据门槛"],
+        "output": "2.4 初稿 + 条件概率预测示意图草稿"
+      },
+      {
+        "date": "2026-08-16",
+        "phaseId": "chapter2",
+        "title": "掌握评价指标与校准公式",
+        "learning": ["MAE、RMSE、NLL、CRPS", "PICP、MPIW、Energy Score", "AUROC、AUPRC、F1、ECE 与 Platt"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "公式", "detail": "手推点预测和概率预测指标"},
+          {"time": "09:45–11:15", "kind": "公式", "detail": "整理区间、联合评分和风险校准指标"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 2.5 指标定义、方向和解释边界"},
+          {"time": "20:00–20:30", "kind": "自测", "detail": "不看资料解释每个指标评价什么"}
+        ],
+        "tasks": ["完成指标公式表", "标出各指标越高或越低越好", "解释 NLL 为什么可能为负", "完成 2.5 初稿"],
+        "output": "2.5 初稿 + 全文指标口径表"
+      },
+      {
+        "date": "2026-08-17",
+        "phaseId": "chapter2",
+        "title": "撰写第二章前半部分",
+        "learning": ["理论章节的信息密度控制", "定义、代表路线、适用假设与后文接口", "避免与第一章重复综述"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "结构", "detail": "复核 2.1–2.3 的段落角色"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "补全 2.1 与 2.2 正文"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "补全 2.3 规整表示理论"},
+          {"time": "20:00–20:30", "kind": "审校", "detail": "删除与第一章重复的研究现状段"}
+        ],
+        "tasks": ["完成 2.1 正文", "完成 2.2 正文", "完成 2.3 正文", "检查每节都指出后续章节落点"],
+        "output": "第二章 2.1–2.3 完整初稿"
+      },
+      {
+        "date": "2026-08-18",
+        "phaseId": "chapter2",
+        "title": "完成第二章闭环",
+        "learning": ["理论符号一致性", "指标定义与实验脚本的一致性", "本章小结如何承接第三章"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "写作", "detail": "补全 2.4 与 2.5 正文"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "撰写 2.6 本章小结"},
+          {"time": "14:00–15:30", "kind": "统稿", "detail": "通读第二章并统一公式、符号、缩写"},
+          {"time": "20:00–20:30", "kind": "检查", "detail": "核对指标与统一实验方案一致"}
+        ],
+        "tasks": ["完成 2.4、2.5 正文", "完成 2.6 本章小结", "统一符号表与正文记号", "形成第二章待核验问题清单"],
+        "output": "第二章 V1，建议总量 6000–8000 字"
+      },
+      {
+        "date": "2026-08-19",
+        "phaseId": "chapter3",
+        "title": "核实数据集与统一协议",
+        "learning": ["MetroPT-3、C-MAPSS、TEP 的数据单位", "时间、engine、simulationRun 的划分差异", "事件格式与密集张量的映射"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "数据", "detail": "阅读三个数据集说明和当前 reader"},
+          {"time": "09:45–11:15", "kind": "协议", "detail": "整理每个数据集的输入、目标、工况和风险标签"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 3.1 问题定义和 3.2 协议提纲"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "标记尚未从原始数据确认的事实"}
+        ],
+        "tasks": ["完成三数据集角色对照表", "完成统一事件与张量字段表", "写出 3.1 初稿", "为所有数据事实标记来源"],
+        "output": "3.1 初稿 + 数据集与张量协议表"
+      },
+      {
+        "date": "2026-08-20",
+        "phaseId": "chapter3",
+        "title": "审计划分、归一化与缺失 mask",
+        "learning": ["先划分再窗口化", "train-only normalization", "固定 mask 的复用与统计"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "代码", "detail": "阅读 split、normalization 和 mask 生成逻辑"},
+          {"time": "09:45–11:15", "kind": "检查", "detail": "运行数据协议相关测试和最小统计"},
+          {"time": "14:00–15:30", "kind": "记录", "detail": "整理无泄露检查结果和 mask 文件规则"},
+          {"time": "20:00–20:30", "kind": "写作", "detail": "补充 3.2 的划分与缺失协议"}
+        ],
+        "tasks": ["确认窗口不跨 split 边界", "确认归一化只使用 train", "确认同 seed 和缺失率复用固定 mask", "记录实际样本数、缺失率和正类数"],
+        "output": "数据协议审计记录 + 3.2 初稿"
+      },
+      {
+        "date": "2026-08-21",
+        "phaseId": "chapter3",
+        "title": "吃透规整表示方法",
+        "learning": ["时间与 mask 编码", "全局和局部多尺度历史聚合", "变量交互与工况注入"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "代码", "detail": "阅读表示编码器的前向数据流"},
+          {"time": "09:45–11:15", "kind": "推导", "detail": "把代码整理为模块输入、公式、输出和作用"},
+          {"time": "14:00–15:30", "kind": "图示", "detail": "画出第三章表示编码流程图草稿"},
+          {"time": "20:00–20:30", "kind": "自测", "detail": "不用代码解释每个模块解决什么"}
+        ],
+        "tasks": ["形成表示方法模块表", "写出每个模块的首要职责", "建立模块—消融—指标对应关系", "完成第三章方法图草稿"],
+        "output": "规整表示方法说明页 + 第三章方法图草稿"
+      },
+      {
+        "date": "2026-08-22",
+        "phaseId": "chapter3",
+        "title": "撰写 3.1 至 3.3",
+        "learning": ["第三章如何形成独立问题闭环", "数据事实与方法动机的分工", "从协议过渡到数据集适配"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "结构", "detail": "复核 3.1–3.3 的论证顺序"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "完善 3.1 与 3.2 正文"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "完成 3.3 数据集适配正文"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "核对数据集数字与来源"}
+        ],
+        "tasks": ["完善 3.1 研究动机与问题定义", "完成 3.2 事件与张量协议", "完成 3.3 数据集适配", "检查所有数据事实可追溯"],
+        "output": "第三章 3.1–3.3 初稿"
+      },
+      {
+        "date": "2026-08-23",
+        "phaseId": "chapter3",
+        "title": "撰写 3.4 与 3.5",
+        "learning": ["缺失机制的工业解释与复现参数", "方法公式和数据流写法", "机制合理性与实验有效性的区别"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "写作", "detail": "完成 3.4 缺失机制与标签协议"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "撰写 3.5.1 输入编码与多尺度表示"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 3.5.2–3.5.3 变量交互和工况注入"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "逐项检查公式、形状和模块作用"}
+        ],
+        "tasks": ["完成 3.4 初稿", "完成 3.5 方法初稿", "所有张量写明形状和 mask 语义", "避免提前写实验提升结论"],
+        "output": "第三章 3.4–3.5 初稿"
+      },
+      {
+        "date": "2026-08-24",
+        "phaseId": "chapter3",
+        "title": "冻结表示实验方案",
+        "learning": ["轻量头独立验证原则", "规则化、缺失感知和连续时间基线", "公平训练预算和评价指标"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "设计", "detail": "确定 E1 表示实验的研究假设和对照"},
+          {"time": "09:45–11:15", "kind": "配置", "detail": "统一 split、mask、seed、历史长度和预测长度"},
+          {"time": "14:00–15:30", "kind": "检查", "detail": "核对基线入口、状态和完整训练条件"},
+          {"time": "20:00–20:30", "kind": "记录", "detail": "写 3.6.1 实验设置草稿"}
+        ],
+        "tasks": ["冻结 E1 主实验矩阵", "确定至少一个插值、一个缺失感知、一个连续时间基线", "建立主模型与消融的同规格轻量头", "写明每个实验支持哪项结论"],
+        "output": "第三章表示实验协议 V1 + 3.6.1 草稿"
+      },
+      {
+        "date": "2026-08-25",
+        "phaseId": "chapter3",
+        "title": "完成实验链路冒烟检查",
+        "learning": ["smoke test 与正式实验的边界", "NaN、Inf、维度和 mask 检查", "run_id 与结果目录规范"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "测试", "detail": "运行数据与框架测试，记录通过和跳过项"},
+          {"time": "09:45–11:15", "kind": "冒烟", "detail": "对核心模型和基线各跑最小 batch"},
+          {"time": "14:00–15:30", "kind": "检查", "detail": "核对损失 finite、输出形状和结果保存"},
+          {"time": "20:00–20:30", "kind": "记录", "detail": "形成正式训练前检查单"}
+        ],
+        "tasks": ["完成测试结果记录", "确认 smoke 结果不进入论文表格", "确认 run_id、seed、config 和 checkpoint 可追溯", "修复阻塞正式训练的问题"],
+        "output": "实验链路检查报告 + 可运行配置清单"
+      },
+      {
+        "date": "2026-08-26",
+        "phaseId": "chapter3",
+        "title": "启动表示主实验",
+        "learning": ["后台训练与日志监控", "validation 指标和 checkpoint 选择", "实验异常的最小诊断流程"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "提交", "detail": "提交本文表示方法和核心基线正式训练"},
+          {"time": "09:45–11:15", "kind": "监控", "detail": "检查首个 epoch、显存、损失和验证指标"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "补全 3.6.1 对比方法与复现协议"},
+          {"time": "20:00–20:30", "kind": "记录", "detail": "记录所有 run_id、seed、开始时间和配置"}
+        ],
+        "tasks": ["提交完整训练而非截断 batch", "记录 run_id 与日志路径", "确认 checkpoint 按 validation 指标选择", "完成实验运行台账"],
+        "output": "正式主实验运行台账 + 3.6.1 完整初稿"
+      },
+      {
+        "date": "2026-08-27",
+        "phaseId": "chapter3",
+        "title": "推进消融与缺失鲁棒性",
+        "learning": ["单变量控制的消融设计", "缺失率扫描与缺失机制比较", "异常结果和阴性结果的记录"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "收割", "detail": "检查主实验完成情况并验证结果文件"},
+          {"time": "09:45–11:15", "kind": "提交", "detail": "提交时间、mask、多尺度和工况关键消融"},
+          {"time": "14:00–15:30", "kind": "提交", "detail": "提交核心模型多缺失率或机制实验"},
+          {"time": "20:00–20:30", "kind": "分析", "detail": "记录支持、冲突和异常现象"}
+        ],
+        "tasks": ["保证每个消融只改变一个核心因素", "固定相同 split、mask 与训练预算", "保留失败和阴性实验记录", "更新实验覆盖矩阵"],
+        "output": "消融与鲁棒性运行台账 + 初步现象记录"
+      },
+      {
+        "date": "2026-08-28",
+        "phaseId": "chapter3",
+        "title": "整理结果并撰写实验部分",
+        "learning": ["从原始结果自动生成表格", "均值、标准差与相对退化率", "结果描述与机制解释的边界"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "收割", "detail": "核对完整结果、配置、checkpoint 和非有限值"},
+          {"time": "09:45–11:15", "kind": "表格", "detail": "生成表示主实验和消融初表"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "撰写 3.6.2–3.6.5，未完成数据不占位造数"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "逐个数字回溯到 run_id"}
+        ],
+        "tasks": ["生成可追溯的实验表格", "区分主实验、消融和鲁棒性结论", "对异常 seed 给出事实记录", "完成 3.6 实验结果初稿"],
+        "output": "第三章实验表 V1 + 3.6 初稿"
+      },
+      {
+        "date": "2026-08-29",
+        "phaseId": "wrap",
+        "title": "完成第三章结果与图表",
+        "learning": ["结果图如何服务论点", "预测误差与鲁棒性曲线解释", "章节小结只总结本章证据"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "图表", "detail": "完成数据协议图和缺失鲁棒性图"},
+          {"time": "09:45–11:15", "kind": "写作", "detail": "完善实验结果分析和失败案例"},
+          {"time": "14:00–15:30", "kind": "写作", "detail": "完成 3.7 本章小结并通读第三章"},
+          {"time": "20:00–20:30", "kind": "核验", "detail": "检查图表、正文和结果文件对应关系"}
+        ],
+        "tasks": ["完成第三章必要图表", "每张图表都有明确问题和结论", "完成 3.7 本章小结", "确保第三章不越界宣称概率和风险贡献"],
+        "output": "第三章 V1，含可用实验表和图"
+      },
+      {
+        "date": "2026-08-30",
+        "phaseId": "wrap",
+        "title": "完成三章交叉一致性审校",
+        "learning": ["问题—理论—方法—证据的一致性", "术语、符号、引用和图表交叉检查", "如何识别重复与前后矛盾"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "结构", "detail": "检查第一章问题是否由第二章支撑、第三章回答"},
+          {"time": "09:45–11:15", "kind": "术语", "detail": "统一异步、缺失、规整表示和概率预测术语"},
+          {"time": "14:00–15:30", "kind": "引用", "detail": "检查引用编号、文献表和数据来源"},
+          {"time": "20:00–20:30", "kind": "图表", "detail": "检查公式、图、表编号和正文引用"}
+        ],
+        "tasks": ["完成三章逻辑链检查", "完成引用连续性和对应关系检查", "完成术语与符号统一", "修复所有可立即解决的问题"],
+        "output": "第一至第三章一致性审校记录 + 修订稿"
+      },
+      {
+        "date": "2026-08-31",
+        "phaseId": "wrap",
+        "title": "交付 V1 并形成下一阶段入口",
+        "learning": ["初稿验收与证据等级", "如何向导师汇报进展和风险", "如何把未完成项转成可执行问题"],
+        "blocks": [
+          {"time": "08:30–09:30", "kind": "验收", "detail": "按总体方案验收第一至第三章"},
+          {"time": "09:45–11:15", "kind": "修订", "detail": "处理影响论证闭环的高优先级问题"},
+          {"time": "14:00–15:30", "kind": "汇报", "detail": "形成导师可读的成果、实验和风险摘要"},
+          {"time": "20:00–20:30", "kind": "复盘", "detail": "总结 30 天学习变化并列出第四、五章入口"}
+        ],
+        "tasks": ["冻结第一至第三章 V1", "汇总所有正式实验 run_id 与状态", "列出证据缺口和未验证风险", "形成下一阶段的输入清单"],
+        "output": "第一至第三章 V1 + 实验台账 + 月度总结"
+      }
+    ]
+  }
+  </script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var STORAGE_KEY = 'thesis-study-tracker-v1';
+      var plan = JSON.parse(document.getElementById('plan-data').textContent);
+      var phaseMap = Object.fromEntries(plan.phases.map(function (phase) {
+        return [phase.id, phase];
+      }));
+      var weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      var state = loadState();
+
+      function defaultState() {
+        return {
+          completed: {},
+          hours: {},
+          notes: {},
+          selectedDate: chooseInitialDate(),
+          activeView: 'today',
+          savedAt: null
+        };
+      }
+
+      function chooseInitialDate() {
+        var today = new Date();
+        var localDate = [
+          today.getFullYear(),
+          String(today.getMonth() + 1).padStart(2, '0'),
+          String(today.getDate()).padStart(2, '0')
+        ].join('-');
+        var inPlan = plan.days.some(function (day) {
+          return day.date === localDate;
+        });
+        return inPlan ? localDate : plan.days[0].date;
+      }
+
+      function loadState() {
+        try {
+          var stored = localStorage.getItem(STORAGE_KEY);
+          if (!stored) {
+            return defaultState();
+          }
+          return Object.assign(defaultState(), JSON.parse(stored));
+        } catch (error) {
+          return defaultState();
+        }
+      }
+
+      function saveState(message) {
+        state.savedAt = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        var target = document.getElementById('save-status-text');
+        target.textContent = message || '刚刚保存';
+      }
+
+      function createElement(tag, className, text) {
+        var element = document.createElement(tag);
+        if (className) {
+          element.className = className;
+        }
+        if (text !== undefined && text !== null) {
+          element.textContent = text;
+        }
+        return element;
+      }
+
+      function appendIcon(parent, name) {
+        var icon = document.createElement('i');
+        icon.setAttribute('data-lucide', name);
+        parent.appendChild(icon);
+        return icon;
+      }
+
+      function refreshIcons() {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }
+
+      function taskKey(day, taskIndex) {
+        return day.date + ':' + taskIndex;
+      }
+
+      function completedTasksForDay(day) {
+        return day.tasks.filter(function (_, index) {
+          return Boolean(state.completed[taskKey(day, index)]);
+        }).length;
+      }
+
+      function dayPercent(day) {
+        return Math.round((completedTasksForDay(day) / day.tasks.length) * 100);
+      }
+
+      function dayIsDone(day) {
+        return completedTasksForDay(day) === day.tasks.length;
+      }
+
+      function totalTaskStats() {
+        var total = 0;
+        var done = 0;
+        plan.days.forEach(function (day) {
+          total += day.tasks.length;
+          done += completedTasksForDay(day);
+        });
+        return { total: total, done: done };
+      }
+
+      function phasePercent(phaseId) {
+        var days = plan.days.filter(function (day) {
+          return day.phaseId === phaseId;
+        });
+        var total = days.reduce(function (sum, day) {
+          return sum + day.tasks.length;
+        }, 0);
+        var done = days.reduce(function (sum, day) {
+          return sum + completedTasksForDay(day);
+        }, 0);
+        return total ? Math.round((done / total) * 100) : 0;
+      }
+
+      function loggedHours() {
+        return Object.values(state.hours).reduce(function (sum, value) {
+          return sum + (Number(value) || 0);
+        }, 0);
+      }
+
+      function completionStreak() {
+        var longest = 0;
+        var current = 0;
+        plan.days.forEach(function (day) {
+          if (dayIsDone(day)) {
+            current += 1;
+            longest = Math.max(longest, current);
+          } else {
+            current = 0;
+          }
+        });
+        return longest;
+      }
+
+      function selectedDay() {
+        return plan.days.find(function (day) {
+          return day.date === state.selectedDate;
+        }) || plan.days[0];
+      }
+
+      function formatDate(dateString) {
+        var date = new Date(dateString + 'T00:00:00');
+        return (date.getMonth() + 1) + ' 月 ' + date.getDate() + ' 日 · ' + weekdayLabels[date.getDay()];
+      }
+
+      function renderStats() {
+        var stats = totalTaskStats();
+        var percent = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
+        var day = selectedDay();
+        var phase = phaseMap[day.phaseId];
+        document.getElementById('stat-completion').textContent = percent + '%';
+        document.getElementById('stat-task-context').textContent = stats.done + ' / ' + stats.total + ' 项';
+        document.getElementById('stat-hours').textContent = loggedHours().toFixed(1).replace('.0', '') + ' h';
+        document.getElementById('stat-streak').textContent = completionStreak() + ' 天';
+        document.getElementById('stat-phase').textContent = phase.label;
+        document.getElementById('stat-phase-context').textContent = phase.goal;
+      }
+
+      function renderRoadmap() {
+        var roadmap = document.getElementById('roadmap');
+        roadmap.replaceChildren();
+        plan.phases.forEach(function (phase) {
+          var button = createElement('button', 'roadmap-stage ' + phase.id);
+          button.type = 'button';
+          button.style.setProperty('--stage-progress', phasePercent(phase.id) + '%');
+          button.appendChild(createElement('strong', '', phase.label));
+          button.appendChild(createElement('span', 'stage-dates', phase.dates));
+          button.appendChild(createElement('span', 'stage-percent', phasePercent(phase.id) + '% 完成'));
+          button.addEventListener('click', function () {
+            var firstDay = plan.days.find(function (day) {
+              return day.phaseId === phase.id && !dayIsDone(day);
+            }) || plan.days.find(function (day) {
+              return day.phaseId === phase.id;
+            });
+            state.selectedDate = firstDay.date;
+            saveState('已切换到 ' + phase.label);
+            activateView('today');
+            renderAll();
+          });
+          roadmap.appendChild(button);
+        });
+      }
+
+      function renderToday() {
+        var day = selectedDay();
+        var phase = phaseMap[day.phaseId];
+        var panel = document.getElementById('view-today');
+        panel.replaceChildren();
+
+        var layout = createElement('div', 'today-grid');
+        var daySheet = createElement('article', 'day-sheet');
+        var header = createElement('div', 'sheet-header');
+        var copy = createElement('div', 'sheet-header-copy');
+        copy.appendChild(createElement('p', 'day-meta', phase.label + ' · ' + formatDate(day.date)));
+        copy.appendChild(createElement('h2', 'day-title', day.title));
+        header.appendChild(copy);
+
+        var nav = createElement('div', 'day-nav');
+        var dayIndex = plan.days.findIndex(function (item) {
+          return item.date === day.date;
+        });
+        var prev = createElement('button', 'icon-btn');
+        prev.type = 'button';
+        prev.setAttribute('aria-label', '前一天');
+        prev.disabled = dayIndex === 0;
+        appendIcon(prev, 'chevron-left');
+        prev.addEventListener('click', function () {
+          if (dayIndex > 0) {
+            state.selectedDate = plan.days[dayIndex - 1].date;
+            saveState('已切换日期');
+            renderAll();
+          }
+        });
+        var next = createElement('button', 'icon-btn');
+        next.type = 'button';
+        next.setAttribute('aria-label', '后一天');
+        next.disabled = dayIndex === plan.days.length - 1;
+        appendIcon(next, 'chevron-right');
+        next.addEventListener('click', function () {
+          if (dayIndex < plan.days.length - 1) {
+            state.selectedDate = plan.days[dayIndex + 1].date;
+            saveState('已切换日期');
+            renderAll();
+          }
+        });
+        nav.append(prev, next);
+        header.appendChild(nav);
+        daySheet.appendChild(header);
+
+        var scheduleSection = createElement('section', 'sheet-section');
+        var scheduleHeading = createElement('div', 'subheading');
+        appendIcon(scheduleHeading, 'clock-3');
+        scheduleHeading.appendChild(createElement('h3', '', '今日时间块'));
+        scheduleSection.appendChild(scheduleHeading);
+        var timeline = createElement('div', 'timeline');
+        day.blocks.forEach(function (block) {
+          var row = createElement('div', 'timeline-row');
+          row.appendChild(createElement('div', 'timeline-time', block.time));
+          row.appendChild(createElement('div', 'timeline-kind', block.kind));
+          row.appendChild(createElement('div', '', block.detail));
+          timeline.appendChild(row);
+        });
+        scheduleSection.appendChild(timeline);
+        daySheet.appendChild(scheduleSection);
+
+        var learningSection = createElement('section', 'sheet-section');
+        var learningHeading = createElement('div', 'subheading');
+        appendIcon(learningHeading, 'brain');
+        learningHeading.appendChild(createElement('h3', '', '需要学会'));
+        learningSection.appendChild(learningHeading);
+        var learningList = createElement('ul', 'learning-list');
+        day.learning.forEach(function (item) {
+          learningList.appendChild(createElement('li', '', item));
+        });
+        learningSection.appendChild(learningList);
+        daySheet.appendChild(learningSection);
+
+        var tasksSection = createElement('section', 'sheet-section');
+        var tasksHeading = createElement('div', 'subheading');
+        appendIcon(tasksHeading, 'list-checks');
+        tasksHeading.appendChild(createElement('h3', '', '完成任务'));
+        tasksSection.appendChild(tasksHeading);
+        var taskList = createElement('div', 'task-list');
+        day.tasks.forEach(function (task, taskIndex) {
+          var key = taskKey(day, taskIndex);
+          var row = createElement('div', 'task-row');
+          var checkbox = document.createElement('input');
+          var checkboxId = 'task-' + day.date + '-' + taskIndex;
+          checkbox.type = 'checkbox';
+          checkbox.id = checkboxId;
+          checkbox.checked = Boolean(state.completed[key]);
+          var label = createElement('label', '', task);
+          label.htmlFor = checkboxId;
+          checkbox.addEventListener('change', function () {
+            state.completed[key] = checkbox.checked;
+            saveState('任务进度已保存');
+            renderAll();
+          });
+          row.append(checkbox, label);
+          taskList.appendChild(row);
+        });
+        tasksSection.appendChild(taskList);
+        daySheet.appendChild(tasksSection);
+
+        var outputSection = createElement('section', 'sheet-section');
+        var outputHeading = createElement('div', 'subheading');
+        appendIcon(outputHeading, 'package-check');
+        outputHeading.appendChild(createElement('h3', '', '当天产出'));
+        outputSection.appendChild(outputHeading);
+        outputSection.appendChild(createElement('div', 'output-box', day.output));
+        daySheet.appendChild(outputSection);
+
+        var checkin = createElement('aside', 'checkin-sheet');
+        var checkinHeader = createElement('div', 'sheet-header');
+        var checkinCopy = createElement('div', 'sheet-header-copy');
+        checkinCopy.appendChild(createElement('p', 'day-meta', 'DAY ' + String(dayIndex + 1).padStart(2, '0')));
+        checkinCopy.appendChild(createElement('h2', 'day-title', '学习打卡'));
+        checkinHeader.appendChild(checkinCopy);
+        checkin.appendChild(checkinHeader);
+
+        var checkinBody = createElement('div', 'sheet-section');
+        var doneCount = completedTasksForDay(day);
+        var progressText = createElement('div', 'day-progress-text');
+        progressText.appendChild(createElement('span', '', '任务进度'));
+        progressText.appendChild(createElement('span', '', doneCount + ' / ' + day.tasks.length));
+        checkinBody.appendChild(progressText);
+        var track = createElement('div', 'day-progress-track');
+        var fill = createElement('div', 'progress-fill');
+        fill.style.width = dayPercent(day) + '%';
+        track.appendChild(fill);
+        checkinBody.appendChild(track);
+
+        var hoursGroup = createElement('div', 'form-group');
+        var hoursLabel = createElement('label', 'form-label');
+        hoursLabel.htmlFor = 'hours-input';
+        hoursLabel.appendChild(createElement('span', '', '实际学习时长'));
+        hoursLabel.appendChild(createElement('span', 'form-hint', '目标 4.5 h'));
+        var hoursInput = createElement('input', 'form-control');
+        hoursInput.id = 'hours-input';
+        hoursInput.type = 'number';
+        hoursInput.min = '0';
+        hoursInput.max = '12';
+        hoursInput.step = '0.5';
+        hoursInput.value = state.hours[day.date] || '';
+        hoursInput.placeholder = '0';
+        hoursInput.addEventListener('input', function () {
+          var value = Math.max(0, Math.min(12, Number(hoursInput.value) || 0));
+          state.hours[day.date] = value;
+          saveState('学习时长已保存');
+          renderStats();
+        });
+        hoursGroup.append(hoursLabel, hoursInput);
+        checkinBody.appendChild(hoursGroup);
+
+        var noteGroup = createElement('div', 'form-group');
+        var noteLabel = createElement('label', 'form-label');
+        noteLabel.htmlFor = 'note-input';
+        noteLabel.appendChild(createElement('span', '', '复盘笔记'));
+        noteLabel.appendChild(createElement('span', 'form-hint', '困难、发现、明日调整'));
+        var noteInput = createElement('textarea', 'form-control');
+        noteInput.id = 'note-input';
+        noteInput.value = state.notes[day.date] || '';
+        noteInput.placeholder = '记录今天真正理解了什么、哪里仍然卡住。';
+        var saveTimer = null;
+        noteInput.addEventListener('input', function () {
+          state.notes[day.date] = noteInput.value;
+          window.clearTimeout(saveTimer);
+          saveTimer = window.setTimeout(function () {
+            saveState('复盘笔记已保存');
+          }, 250);
+        });
+        noteGroup.append(noteLabel, noteInput);
+        checkinBody.appendChild(noteGroup);
+
+        var actions = createElement('div', 'checkin-actions');
+        var completeButton = createElement('button', 'btn btn-primary');
+        completeButton.type = 'button';
+        appendIcon(completeButton, dayIsDone(day) ? 'circle-check-big' : 'check-check');
+        completeButton.appendChild(document.createTextNode(dayIsDone(day) ? '本日已完成' : '完成本日全部任务'));
+        completeButton.disabled = dayIsDone(day);
+        completeButton.addEventListener('click', function () {
+          day.tasks.forEach(function (_, index) {
+            state.completed[taskKey(day, index)] = true;
+          });
+          saveState('本日任务已全部完成');
+          renderAll();
+        });
+        actions.appendChild(completeButton);
+        checkinBody.appendChild(actions);
+        checkin.appendChild(checkinBody);
+
+        layout.append(daySheet, checkin);
+        panel.appendChild(layout);
+      }
+
+      function renderCalendar() {
+        var panel = document.getElementById('view-calendar');
+        panel.replaceChildren();
+        var header = createElement('div', 'calendar-header');
+        header.appendChild(createElement('h2', '', '2026 年 8 月'));
+        var legend = createElement('div', 'legend');
+        plan.phases.forEach(function (phase) {
+          var item = createElement('span', 'legend-item');
+          var dot = createElement('span', 'legend-dot');
+          dot.style.background = phase.color;
+          item.append(dot, document.createTextNode(phase.label));
+          legend.appendChild(item);
+        });
+        header.appendChild(legend);
+        panel.appendChild(header);
+
+        var grid = createElement('div', 'calendar-grid');
+        for (var spacerIndex = 0; spacerIndex < 6; spacerIndex += 1) {
+          grid.appendChild(createElement('div', 'calendar-spacer'));
+        }
+        plan.days.forEach(function (day) {
+          var phase = phaseMap[day.phaseId];
+          var date = new Date(day.date + 'T00:00:00');
+          var button = createElement('button', 'calendar-day' + (dayIsDone(day) ? ' is-done' : ''));
+          button.type = 'button';
+          button.style.setProperty('--phase-color', phase.color);
+          var top = createElement('div', 'calendar-day-top');
+          top.appendChild(createElement('span', 'calendar-date', String(date.getDate())));
+          top.appendChild(createElement('span', 'calendar-weekday', weekdayLabels[date.getDay()]));
+          button.appendChild(top);
+          button.appendChild(createElement('div', 'calendar-title', day.title));
+          button.appendChild(createElement('div', 'calendar-progress', completedTasksForDay(day) + ' / ' + day.tasks.length + ' 项'));
+          button.addEventListener('click', function () {
+            state.selectedDate = day.date;
+            saveState('已选择 ' + formatDate(day.date));
+            activateView('today');
+            renderAll();
+          });
+          grid.appendChild(button);
+        });
+        panel.appendChild(grid);
+      }
+
+      function renderChapters() {
+        var panel = document.getElementById('view-chapters');
+        panel.replaceChildren();
+        var header = createElement('div', 'section-heading-row');
+        header.appendChild(createElement('h2', '', '章节交付'));
+        header.appendChild(createElement('span', 'section-note', '初稿目标与知识依赖'));
+        panel.appendChild(header);
+
+        var chapters = [
+          {
+            phaseId: 'foundation',
+            kicker: '8.2—8.6',
+            label: '基础补课',
+            detail: '完成时间序列、异步缺失、概率预测、风险校准的最低知识闭环。'
+          },
+          {
+            phaseId: 'chapter1',
+            kicker: '8.7—8.12',
+            label: '第一章 绪论',
+            detail: '完成研究背景、三类研究现状、三个问题、三项创新与组织结构，建议 7000–9000 字。'
+          },
+          {
+            phaseId: 'chapter2',
+            kicker: '8.13—8.18',
+            label: '第二章 理论基础',
+            detail: '完成多元序列、异步表示、条件概率、指标与校准基础，建议 6000–8000 字。'
+          },
+          {
+            phaseId: 'chapter3',
+            kicker: '8.19—8.29',
+            label: '第三章 规整表示与实验',
+            detail: '完成数据协议、规整表示方法、轻量头独立实验、消融与缺失鲁棒性，形成章节 V1。'
+          },
+          {
+            phaseId: 'wrap',
+            kicker: '8.30—8.31',
+            label: '三章统稿',
+            detail: '完成逻辑、引用、术语、符号、图表和结果溯源检查，交付第一至第三章 V1。'
+          }
+        ];
+
+        var list = createElement('div', 'chapter-list');
+        chapters.forEach(function (chapter) {
+          var percent = phasePercent(chapter.phaseId);
+          var row = createElement('article', 'chapter-row');
+          var name = createElement('div');
+          name.appendChild(createElement('div', 'row-kicker', chapter.kicker));
+          name.appendChild(createElement('h3', '', chapter.label));
+          row.appendChild(name);
+          row.appendChild(createElement('div', 'row-details', chapter.detail));
+          var progress = createElement('div');
+          progress.appendChild(createElement('div', 'row-progress-value', percent + '%'));
+          var track = createElement('div', 'progress-track');
+          var fill = createElement('div', 'progress-fill');
+          fill.style.width = percent + '%';
+          track.appendChild(fill);
+          progress.appendChild(track);
+          row.appendChild(progress);
+          list.appendChild(row);
+        });
+        panel.appendChild(list);
+      }
+
+      function renderExperiments() {
+        var panel = document.getElementById('view-experiments');
+        panel.replaceChildren();
+        var header = createElement('div', 'section-heading-row');
+        header.appendChild(createElement('h2', '', '第三章实验链'));
+        header.appendChild(createElement('span', 'section-note', '8.19—8.29 · 只验证规整表示'));
+        panel.appendChild(header);
+
+        var experiments = [
+          {
+            label: '数据协议核验',
+            dates: ['2026-08-19', '2026-08-20'],
+            detail: '核对 split、窗口边界、train-only normalization、固定 missing mask 和风险标签统计。'
+          },
+          {
+            label: '表示方法拆解',
+            dates: ['2026-08-21', '2026-08-23'],
+            detail: '把时间、mask、多尺度、变量交互和工况模块映射到公式、消融与指标。'
+          },
+          {
+            label: '实验方案冻结',
+            dates: ['2026-08-24'],
+            detail: '确定轻量头、核心基线、统一训练预算、主指标和可声称边界。'
+          },
+          {
+            label: '冒烟与测试',
+            dates: ['2026-08-25'],
+            detail: '验证数据、维度、损失、checkpoint 和结果目录；调试结果不进入论文表格。'
+          },
+          {
+            label: '表示主实验',
+            dates: ['2026-08-26'],
+            detail: '提交完整训练，记录 run_id、seed、配置、日志和 checkpoint 选择依据。'
+          },
+          {
+            label: '消融与鲁棒性',
+            dates: ['2026-08-27'],
+            detail: '单变量控制消融，并扫描核心缺失率或缺失机制。'
+          },
+          {
+            label: '结果与图表',
+            dates: ['2026-08-28', '2026-08-29'],
+            detail: '从原始结果生成可追溯表格和图，完成第三章实验分析。'
+          }
+        ];
+
+        var list = createElement('div', 'experiment-list');
+        experiments.forEach(function (experiment) {
+          var relatedDays = experiment.dates.map(function (date) {
+            return plan.days.find(function (day) {
+              return day.date === date;
+            });
+          }).filter(Boolean);
+          var total = relatedDays.reduce(function (sum, day) {
+            return sum + day.tasks.length;
+          }, 0);
+          var done = relatedDays.reduce(function (sum, day) {
+            return sum + completedTasksForDay(day);
+          }, 0);
+          var status = done === 0 ? '未开始' : done === total ? '已完成' : '进行中';
+          var statusClass = done === 0 ? '' : done === total ? ' done' : ' active';
+          var row = createElement('article', 'experiment-row');
+          var name = createElement('div');
+          name.appendChild(createElement('div', 'row-kicker', experiment.dates.map(function (date) {
+            return Number(date.slice(-2)) + ' 日';
+          }).join('、')));
+          name.appendChild(createElement('h3', '', experiment.label));
+          row.appendChild(name);
+          row.appendChild(createElement('div', 'row-details', experiment.detail));
+          row.appendChild(createElement('span', 'experiment-status' + statusClass, status));
+          list.appendChild(row);
+        });
+        panel.appendChild(list);
+      }
+
+      function activateView(viewName) {
+        state.activeView = viewName;
+        document.querySelectorAll('.tab-button').forEach(function (button) {
+          button.setAttribute('aria-selected', String(button.dataset.view === viewName));
+        });
+        document.querySelectorAll('.view-panel').forEach(function (panel) {
+          panel.classList.toggle('is-active', panel.dataset.view === viewName);
+        });
+      }
+
+      function renderAll() {
+        renderStats();
+        renderRoadmap();
+        renderToday();
+        renderCalendar();
+        renderChapters();
+        renderExperiments();
+        activateView(state.activeView || 'today');
+        refreshIcons();
+      }
+
+      function downloadBackup() {
+        var payload = {
+          app: 'thesis-study-tracker',
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          state: state
+        };
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = 'thesis-study-progress-2026-08.json';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        document.getElementById('save-status-text').textContent = '进度备份已导出';
+      }
+
+      function importBackup(file) {
+        var reader = new FileReader();
+        reader.addEventListener('load', function () {
+          try {
+            var payload = JSON.parse(String(reader.result));
+            if (!payload || payload.app !== 'thesis-study-tracker' || !payload.state) {
+              throw new Error('invalid backup');
+            }
+            state = Object.assign(defaultState(), payload.state);
+            saveState('进度备份已导入');
+            renderAll();
+          } catch (error) {
+            window.alert('无法导入：请选择由本页面导出的 JSON 备份。');
+          }
+        });
+        reader.readAsText(file);
+      }
+
+      function resetProgress() {
+        var confirmed = window.confirm('确定清空所有勾选、时长和复盘笔记吗？此操作不可撤销。');
+        if (!confirmed) {
+          return;
+        }
+        state = defaultState();
+        localStorage.removeItem(STORAGE_KEY);
+        saveState('全部进度已重置');
+        renderAll();
+      }
+
+      document.querySelectorAll('.tab-button').forEach(function (button) {
+        button.addEventListener('click', function () {
+          activateView(button.dataset.view);
+          saveState('视图已切换');
+        });
+      });
+
+      document.getElementById('export-button').addEventListener('click', downloadBackup);
+      document.getElementById('reset-button').addEventListener('click', resetProgress);
+      document.getElementById('import-button').addEventListener('click', function () {
+        document.getElementById('import-file').click();
+      });
+      document.getElementById('import-file').addEventListener('change', function (event) {
+        var file = event.target.files && event.target.files[0];
+        if (file) {
+          importBackup(file);
+        }
+        event.target.value = '';
+      });
+
+      window.downloadBackup = downloadBackup;
+      window.resetProgress = resetProgress;
+      window.addEventListener('DOMContentLoaded', renderAll);
+      window.addEventListener('load', refreshIcons);
+    }());
+  </script>
+</body>
+</html>

@@ -11,19 +11,264 @@ class ModelSpec:
     display_name: str
     status: str
     category: str
+    #: faithful | adapted | adapted_profiti | own | "" (unset)
+    implementation: str = ""
+    #: Plain-text citation of the source mechanism; no URLs (portability rule).
+    source_identity: str = ""
+    #: Whether the mechanism consumes real timestamps from T_obs.
+    requires_time_input: bool = False
+    #: Preregistered missing-data adapter description (history-only scope).
+    adapter: str = ""
 
 
 _MODEL_SPECS: Dict[str, ModelSpec] = {
-    "tcn_gaussian": ModelSpec("tcn_gaussian", "TCN-Gaussian", "not_implemented", "baseline"),
-    "patchtst_gaussian": ModelSpec(
-        "patchtst_gaussian", "PatchTST-Gaussian", "not_implemented", "baseline"
+    "tcn_gaussian": ModelSpec(
+        "tcn_gaussian",
+        "TCN-Gaussian",
+        "pilot_ready",
+        "baseline",
+        implementation="faithful",
+        source_identity=(
+            "Causal dilated TCN encoder (Bai et al., 2018) with an "
+            "independent diagonal Gaussian prediction head; this repository's "
+            "own comparison implementation of the declared regular-grid "
+            "convolutional probabilistic baseline with no further "
+            "simplification"
+        ),
+        requires_time_input=False,
+        adapter=(
+            "regular-grid assumption: features are concat(X*M, M, context) on "
+            "the observation index grid with no imputation; missing positions "
+            "enter as zeros with the mask channel; real timestamps are ignored"
+        ),
     ),
-    "gru_d": ModelSpec("gru_d", "GRU-D", "not_implemented", "baseline"),
-    "ode_rnn": ModelSpec("ode_rnn", "ODE-RNN", "not_implemented", "baseline"),
+    "patchtst_gaussian": ModelSpec(
+        "patchtst_gaussian",
+        "PatchTST-Gaussian",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "PatchTST (Nie et al., 2023) patching with a Transformer encoder "
+            "over patch tokens plus an independent Gaussian head; adapted: a "
+            "compact per-sensor patch Transformer (channel-stacked patch "
+            "tokens, few encoder layers) instead of the full "
+            "channel-independent PatchTST backbone with RevIN and "
+            "decomposition"
+        ),
+        requires_time_input=False,
+        adapter=(
+            "regular-grid assumption: features are concat(X*M, M) on the "
+            "observation index grid with no imputation; missing positions "
+            "enter as zeros with the mask channel; real timestamps are ignored"
+        ),
+    ),
+    "gru_d_gaussian": ModelSpec(
+        "gru_d_gaussian",
+        "GRU-D + Gaussian",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "GRU-D (Che et al., 2018): the model consumes the observation "
+            "mask, the elapsed time since the last observation and a "
+            "learnable exponential input decay toward the train mean, "
+            "followed by a unified diagonal Gaussian prediction head; "
+            "adapted: one learnable non-negative decay rate per sensor "
+            "instead of a per-feature affine rate map, and no hidden-state "
+            "decay term"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: missing values decay as "
+            "exp(-softplus(rate)*delta_t) toward the train-only fill value "
+            "(0.0 in the frozen normalized space); delta_t follows the GRU-D "
+            "recursion over the final shared mask"
+        ),
+    ),
+    "ode_rnn_gaussian": ModelSpec(
+        "ode_rnn_gaussian",
+        "ODE-RNN + Gaussian",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "ODE-RNN (Rubanova et al., 2019, latent ODE): the hidden state "
+            "evolves by the real elapsed time between historical observations "
+            "and up to the forecast origin, with a GRUCell update at each "
+            "observation step, plus an independent Gaussian head; adapted: "
+            "fixed-count Euler integration with a learned tanh vector field "
+            "instead of a black-box adjoint ODE solver"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: values enter as X*M with the mask as an "
+            "input channel; the hidden state integrates over real T_obs gaps "
+            "and the gap to the forecast origin T_q[:, 0]; no other future "
+            "field is read"
+        ),
+    ),
+    "grafiti_gaussian": ModelSpec(
+        "grafiti_gaussian",
+        "GraFITi + Gaussian",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "GraFITi (Yalavarthi et al., 2024): irregular time series "
+            "forecasting as graph message passing that couples sensors and "
+            "observation times; adapted: a learnable static sensor adjacency "
+            "with per-gap exponential time decay of the propagated state over "
+            "the real T_obs grid, instead of the original sparse bipartite "
+            "time-variable graph and learned edge weights"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: features are concat(X*M, M, context) per "
+            "observation step; propagation strength decays as "
+            "exp(-softplus(rate)*dt) with the real inter-observation gap dt, "
+            "so no values are imputed and no future field is read"
+        ),
+    ),
+    "li_tcn": ModelSpec(
+        "li_tcn",
+        "LI+TCN",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "Linear interpolation over real history timestamps (Che et al., "
+            "2018, GRU-D-style interpolation baseline) feeding a causal dilated "
+            "TCN encoder (Bai et al., 2018); TCN backbone adapted from the "
+            "project's TCN-Gaussian reference with the Gaussian parts removed"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "history-only linear interpolation between observed neighbors in "
+            "real time; leading gaps and fully unobserved channels use the "
+            "train-only fill value (0.0 in the frozen normalized space)"
+        ),
+    ),
+    "ff_gru": ModelSpec(
+        "ff_gru",
+        "FF+GRU",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "Forward-fill missing-data adapter with a unidirectional GRU "
+            "encoder (Cho et al., 2014); last-observation carry-forward inside "
+            "the history window only"
+        ),
+        requires_time_input=False,
+        adapter=(
+            "history-only forward fill; leading gaps and fully unobserved "
+            "channels use the train-only fill value (0.0 in the frozen "
+            "normalized space)"
+        ),
+    ),
+    "masked_tcn": ModelSpec(
+        "masked_tcn",
+        "Masked TCN",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "Masked-input causal TCN: features are concat(X*M, M, context) "
+            "with no imputation; TCN backbone adapted from the project's "
+            "TCN-Gaussian reference (Bai et al., 2018) with the Gaussian parts "
+            "removed"
+        ),
+        requires_time_input=False,
+        adapter=(
+            "no fill: masked-out positions are zeroed and the observation mask "
+            "is concatenated as input channels, so the model sees exactly what "
+            "was observed in history"
+        ),
+    ),
+    "gru_d": ModelSpec(
+        "gru_d",
+        "GRU-D",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "GRU-D (Che et al., 2018): the model consumes the observation "
+            "mask, the elapsed time since the last observation and a learnable "
+            "exponential input decay toward the train mean; adapted: one "
+            "learnable non-negative decay rate per sensor instead of a "
+            "per-feature affine rate map, and no hidden-state decay term"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: missing values decay as "
+            "exp(-softplus(rate)*delta_t) toward the train-only fill value "
+            "(0.0 in the frozen normalized space); delta_t follows the GRU-D "
+            "recursion over the final shared mask"
+        ),
+    ),
+    "ode_rnn": ModelSpec(
+        "ode_rnn",
+        "ODE-RNN",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted",
+        source_identity=(
+            "ODE-RNN (Rubanova et al., 2019, latent ODE): the hidden state "
+            "evolves by the real elapsed time between historical observations "
+            "and is updated by a GRUCell at each observation step; adapted: "
+            "Euler integration with a learned tanh vector field instead of a "
+            "black-box adjoint ODE solver"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: values enter as X*M with the mask as an "
+            "input channel; the hidden state integrates over real T_obs gaps "
+            "within the history window and never reads T_q or any future field"
+        ),
+    ),
+    "kst_light": ModelSpec(
+        "kst_light",
+        "KST-Light",
+        "pilot_ready",
+        "own",
+        implementation="own",
+        source_identity=(
+            "Project model: MultiScaleKAFEncoder asynchronous regularized-"
+            "history encoder + unified lightweight Linear/MLP point head"
+        ),
+        requires_time_input=False,
+        adapter=(
+            "history-only encoder consumption; missing history handled inside "
+            "the encoder through the observation mask, no target or future "
+            "input"
+        ),
+    ),
     "mtan": ModelSpec("mtan", "mTAN", "not_implemented", "baseline"),
     "tpatchgnn": ModelSpec("tpatchgnn", "tPatchGNN", "not_implemented", "baseline"),
     "grafiti": ModelSpec("grafiti", "GraFITi", "not_implemented", "baseline"),
-    "profiti": ModelSpec("profiti", "ProFITi", "not_implemented", "baseline"),
+    "profiti": ModelSpec(
+        "profiti",
+        "ProFITi",
+        "pilot_ready",
+        "baseline",
+        implementation="adapted_profiti",
+        source_identity=(
+            "ProFITi (Yalavarthi et al., 2024): probabilistic forecasting of "
+            "irregular time series via a conditional normalizing flow over "
+            "the query vector (triangular attention flow trained with joint "
+            "NLL); adapted_profiti: the project's ProFITiFlowHead flow and "
+            "QueryConditionAdapter conditioning driven by a GRU observation "
+            "encoder, instead of the original bidirectional encoder stack; "
+            "NLL and samples come from this same trained flow"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: features are concat(X*M, M, T_obs, context) "
+            "so the model sees real observation timestamps; query "
+            "conditioning uses T_q only as the forecast time grid"
+        ),
+    ),
     "kafnet": ModelSpec("kafnet", "KAFNet", "not_implemented", "baseline"),
     "kafnet_gaussian": ModelSpec(
         "kafnet_gaussian", "KAFNet + Gaussian Head", "not_implemented", "ablation"
@@ -38,7 +283,24 @@ _MODEL_SPECS: Dict[str, ModelSpec] = {
         "kaf_profiti_joint", "KAFNet + ProFITi Joint Flow", "enabled", "final"
     ),
     "kst_probflow": ModelSpec(
-        "kst_probflow", "KST ProbFlow", "enabled", "final"
+        "kst_probflow",
+        "KST ProbFlow",
+        "enabled",
+        "final",
+        implementation="own",
+        source_identity=(
+            "Project model KST ProbFlow: MultiScaleKAFEncoder asynchronous "
+            "regularized-history encoder + dynamic sensor graph + "
+            "QueryConditionAdapter with a Student-t low-rank copula flow head "
+            "(joint NLL with seeded sampling); NLL and samples come from the "
+            "same trained head"
+        ),
+        requires_time_input=True,
+        adapter=(
+            "native sparse input: the encoder consumes the shared observation "
+            "mask and real T_obs/T_q event times; no imputation, and no "
+            "target or future field enters the prediction paths"
+        ),
     ),
 }
 

@@ -18,12 +18,12 @@ import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
+from kaf_profiti.experiments.accumulators import GlobalMetricAccumulator
 from kaf_profiti.experiments.datasets import create_protocol_datasets
 from kaf_profiti.experiments.masks import MaskedWindowDataset, generate_or_load_split_masks
 from kaf_profiti.experiments.metrics import (
     completed_metrics_template,
     expected_calibration_error,
-    point_metrics,
     safe_binary_metrics,
 )
 from kaf_profiti.industrial.batch import IndustrialCollator
@@ -158,7 +158,7 @@ def _evaluate(
     prediction_writer: Optional[PredictionNpyWriter] = None,
     calibration: Optional[Dict[str, object]] = None,
 ):
-    totals = {"nll": 0.0, "mae": 0.0, "rmse": 0.0, "crps": 0.0, "picp": 0.0, "mpiw": 0.0}
+    accumulator = GlobalMetricAccumulator()
     diagnostics = {
         "nonfinite_sample_rows": 0,
         "nonfinite_mean_rows": 0,
@@ -179,9 +179,24 @@ def _evaluate(
             batch = batch.to(device)
             mean, scale = model(batch.X_obs, batch.M_obs, batch.context)
             nll = model.nll(batch.Y_q, mean, scale, batch.M_q)
-            mae, rmse = point_metrics(batch.Y_q, mean, batch.M_q)
             crps = gaussian_crps(batch.Y_q, mean, scale, batch.M_q)
             picp, mpiw = gaussian_interval_metrics(batch.Y_q, mean, scale, batch.M_q)
+            mask_count = float(batch.M_q.sum())
+            # model.nll and gaussian_crps divide by mask.sum(), so multiplying
+            # the batch means back by mask_count recovers exact sums; the
+            # interval metrics divide by the finite-and-masked valid count.
+            interval_count = float(
+                (
+                    (batch.M_q > 0)
+                    & torch.isfinite(batch.Y_q)
+                    & torch.isfinite(mean)
+                    & torch.isfinite(scale)
+                ).sum()
+            )
+            accumulator.update_point(batch.Y_q, mean, batch.M_q)
+            accumulator.update_nll(float(nll.detach().cpu()) * mask_count, mask_count)
+            accumulator.update_crps(crps * mask_count, mask_count)
+            accumulator.update_interval_means("main", picp, mpiw, interval_count)
             risk = gaussian_risk_score(mean, scale)
             risk = _apply_risk_calibration(risk, calibration)
             label = _risk_labels(config.dataset, batch, config.risk_threshold)
@@ -210,16 +225,10 @@ def _evaluate(
             window_errors.append(_window_rmse(batch.Y_q, mean, batch.M_q))
             risks.append(risk.detach().cpu().numpy())
             labels.append(label.detach().cpu().numpy())
-            totals["nll"] += float(nll.detach().cpu())
-            totals["mae"] += mae
-            totals["rmse"] += rmse
-            totals["crps"] += crps
-            totals["picp"] += picp
-            totals["mpiw"] += mpiw
             count += 1
     if prediction_writer is not None:
         prediction_writer.close()
-    averaged = {key: value / max(count, 1) for key, value in totals.items()}
+    averaged = accumulator.result()
     risk_scores = np.concatenate(risks) if risks else np.array([])
     risk_labels = np.concatenate(labels) if labels else np.array([])
     averaged.update(

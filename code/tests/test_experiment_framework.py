@@ -196,7 +196,11 @@ def test_registry_enables_only_kaf_profiti_joint():
 
     assert specs["kaf_profiti_joint"].status == "enabled"
     assert specs["kst_probflow"].status == "enabled"
-    assert specs["tcn_gaussian"].status == "not_implemented"
+    # CH2.5-P02 lifted the probabilistic baselines to pilot_ready; pilot-ready
+    # models are constructed through the baseline factories, never through
+    # create_model, which still gates on status == "enabled".
+    assert specs["tcn_gaussian"].status == "pilot_ready"
+    assert specs["patchtst_gaussian"].status == "pilot_ready"
     assert get_model_spec("kaf_profiti_joint").display_name == "KAFNet + ProFITi Joint Flow"
     with pytest.raises(NotImplementedError):
         create_model("tcn_gaussian", num_sensors=15, context_dim=3, device="cpu")

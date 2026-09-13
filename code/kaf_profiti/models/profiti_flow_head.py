@@ -226,9 +226,17 @@ class ProFITiFlowHead(nn.Module):
         joint_nll = gaussian_nll.sum(dim=-1) - ldj
         return joint_nll / mask.sum(dim=-1).clamp_min(1.0)
 
-    def sample(self, hidden_states: Tensor, mask: Tensor, nsamples: int = 100) -> Tensor:
+    def sample(
+        self,
+        hidden_states: Tensor,
+        mask: Tensor,
+        nsamples: int = 100,
+        generator: torch.Generator = None,
+    ) -> Tensor:
         batch_size, query_count, _ = hidden_states.shape
-        z = torch.randn(batch_size, nsamples, query_count, device=hidden_states.device)
+        z = torch.randn(
+            batch_size, nsamples, query_count, device=hidden_states.device, generator=generator
+        )
         z_flat = z.reshape(batch_size * nsamples, query_count)
         hidden_flat = (
             hidden_states.unsqueeze(1)

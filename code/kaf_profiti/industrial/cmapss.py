@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import torch
@@ -90,7 +90,28 @@ class CMapssWindowDataset(Dataset):
         rul_cap: int = 125,
         normalize: bool = True,
         context_mode: str = "mean",
+        stats: Optional[Dict[str, "Tensor"]] = None,
     ):
+        """Initialize a C-MAPSS window dataset.
+
+        Args:
+            data_dir: Directory holding the official ``train_/test_<subset>.txt`` files.
+            subset: C-MAPSS subset name such as ``FD004``.
+            split: ``train`` or ``test`` (official file to load).
+            history_len: History window length.
+            pred_len: Forecast window length.
+            stride: Window stride in cycles.
+            async_mode: Missing-mechanism mode for the built-in simulator.
+            seed: Run seed for the built-in per-window mask simulator.
+            rul_cap: Cap applied to RUL labels.
+            normalize: Whether to normalize when no frozen ``stats`` are given.
+            context_mode: ``mean`` or ``last`` aggregation of setting channels.
+            stats: Frozen normalization statistics (``sensor_mean``/``sensor_std``/
+                ``setting_mean``/``setting_std``). When provided they are used
+                as-is and the constructor never re-estimates statistics from
+                the loaded frame; protocol code must always pass train-engine
+                only statistics here.
+        """
         self.data_dir = Path(data_dir)
         self.subset = subset
         self.split = split
@@ -111,7 +132,10 @@ class CMapssWindowDataset(Dataset):
             raise ValueError("context_mode must be 'mean' or 'last'")
 
         self.frame = load_cmapss_frame(self.data_dir, subset, split)
-        self.stats = _training_stats(self.data_dir, subset) if normalize else None
+        if stats is not None:
+            self.stats = stats
+        else:
+            self.stats = _training_stats(self.data_dir, subset) if normalize else None
         self.masker = MissingMechanismSimulator(mode=async_mode)
         self._units: Dict[int, pd.DataFrame] = {
             int(unit): group.reset_index(drop=True)

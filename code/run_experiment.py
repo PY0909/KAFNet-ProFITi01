@@ -12,13 +12,13 @@ import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
+from kaf_profiti.experiments.accumulators import GlobalMetricAccumulator
 from kaf_profiti.experiments.datasets import create_protocol_datasets
 from kaf_profiti.experiments.masks import MaskedWindowDataset, generate_or_load_split_masks
 from kaf_profiti.experiments.metrics import (
     completed_metrics_template,
     expected_calibration_error,
     interval_metrics,
-    point_metrics,
     risk_score_from_samples,
     safe_binary_metrics,
 )
@@ -500,18 +500,7 @@ def _evaluate(
     collect_outputs: bool = True,
     calibration: Optional[Dict[str, object]] = None,
 ):
-    totals = {
-        "nll": 0.0,
-        "mae": 0.0,
-        "rmse": 0.0,
-        "crps": 0.0,
-        "picp": 0.0,
-        "mpiw": 0.0,
-        "sample_picp": 0.0,
-        "sample_mpiw": 0.0,
-        "quantile_picp": 0.0,
-        "quantile_mpiw": 0.0,
-    }
+    accumulator = GlobalMetricAccumulator()
     optional_counts = {"quantile": 0}
     diagnostics = {
         "nonfinite_sample_rows": 0,
@@ -535,7 +524,7 @@ def _evaluate(
                 break
             batch = batch.to(device)
             hidden = model.distribution(batch)
-            nll = model.flow_head.nll(batch.y_flat, hidden, batch.mq_flat).mean()
+            nll_rows = model.flow_head.nll(batch.y_flat, hidden, batch.mq_flat)
             samples = model.flow_head.sample(hidden, batch.mq_flat, nsamples=config.nsamples)
             mean = samples.mean(dim=1)
             diagnostics["nonfinite_sample_rows"] += _nonfinite_rows(samples)
@@ -543,9 +532,15 @@ def _evaluate(
             diagnostics["finite_metric_positions"] += _finite_metric_positions(
                 batch.y_flat, mean, batch.mq_flat
             )
-            mae, rmse = point_metrics(batch.y_flat, mean, batch.mq_flat)
+            mask_count = float(batch.mq_flat.sum())
+            row_counts = batch.mq_flat.sum(dim=-1)
+            accumulator.update_point(batch.y_flat, mean, batch.mq_flat)
+            accumulator.update_nll(
+                float((nll_rows * row_counts).sum().cpu()), float(row_counts.sum().cpu())
+            )
             window_errors.append(_window_rmse(batch.y_flat, mean, batch.mq_flat))
             sample_picp, sample_mpiw = interval_metrics(batch.y_flat, samples, batch.mq_flat)
+            accumulator.update_interval_means("sample", sample_picp, sample_mpiw, mask_count)
             quantile_picp, quantile_mpiw = None, None
             if hasattr(model, "predict_quantiles"):
                 quantiles = model.quantile_head(hidden)
@@ -566,7 +561,13 @@ def _evaluate(
                     batch.mq_flat,
                     conformal_qhat=conformal_qhat,
                 )
+            accumulator.update_interval_means("main", picp, mpiw, mask_count)
+            if quantile_picp is not None:
+                accumulator.update_interval_means(
+                    "quantile", quantile_picp, quantile_mpiw, mask_count
+                )
             crps = float(model.flow_head.crps(batch.y_flat, samples, batch.mq_flat).cpu())
+            accumulator.update_crps(crps * mask_count, mask_count)
             risk_source = "samples"
             if hasattr(model, "predict_risk"):
                 risk = model.predict_risk(batch, nsamples=config.nsamples)
@@ -576,17 +577,6 @@ def _evaluate(
             risk = _apply_risk_calibration(risk, calibration)
             diagnostics["nonfinite_risk_rows"] += _nonfinite_rows(risk)
             label = _risk_labels(config.dataset, batch, config.risk_threshold)
-            totals["nll"] += float(nll.cpu())
-            totals["mae"] += mae
-            totals["rmse"] += rmse
-            totals["crps"] += crps
-            totals["picp"] += picp
-            totals["mpiw"] += mpiw
-            totals["sample_picp"] += sample_picp
-            totals["sample_mpiw"] += sample_mpiw
-            if quantile_picp is not None:
-                totals["quantile_picp"] += quantile_picp
-                totals["quantile_mpiw"] += quantile_mpiw
             mean_np = mean.cpu().numpy()
             samples_np = samples.cpu().numpy()
             risk_np = risk.cpu().numpy()
@@ -599,15 +589,8 @@ def _evaluate(
             labels.append(label.cpu().numpy())
             count += 1
     elapsed = time.perf_counter() - start
-    averaged = {
-        key: value / max(count, 1)
-        for key, value in totals.items()
-        if not key.startswith("quantile_")
-    }
-    if optional_counts["quantile"]:
-        averaged["quantile_picp"] = totals["quantile_picp"] / optional_counts["quantile"]
-        averaged["quantile_mpiw"] = totals["quantile_mpiw"] / optional_counts["quantile"]
-    else:
+    averaged = accumulator.result()
+    if not optional_counts["quantile"]:
         averaged["quantile_picp"] = None
         averaged["quantile_mpiw"] = None
     risk_scores = np.concatenate(risks) if risks else np.array([])

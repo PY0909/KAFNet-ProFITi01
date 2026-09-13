@@ -91,15 +91,24 @@ class LowRankCopulaFlowHead(nn.Module):
         corr_penalty = 0.001 * self.factor_net(hidden_states).pow(2).mean(dim=(1, 2))
         return nll + corr_penalty
 
-    def sample(self, hidden_states: Tensor, mask: Tensor, nsamples: int = 100) -> Tensor:
+    def sample(
+        self,
+        hidden_states: Tensor,
+        mask: Tensor,
+        nsamples: int = 100,
+        generator: torch.Generator = None,
+    ) -> Tensor:
         loc, scale, factors = self.params(hidden_states)
         batch_size, query_count = loc.shape
-        eps = torch.randn(batch_size, nsamples, query_count, device=hidden_states.device)
+        eps = torch.randn(
+            batch_size, nsamples, query_count, device=hidden_states.device, generator=generator
+        )
         shared = torch.randn(
             batch_size,
             nsamples,
             self.copula_rank,
             device=hidden_states.device,
+            generator=generator,
         )
         correlated = torch.einsum("bsr,bkr->bsk", shared, factors)
         noise = eps + correlated

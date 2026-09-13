@@ -5,6 +5,10 @@ import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 
+#: Two-sided 95% Gaussian quantile (P95 interval = mean +/- Z95 * scale);
+#: kept identical to the unified pilot contract value.
+Z95 = 1.959964
+
 
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size: int):
@@ -93,7 +97,32 @@ class TemporalConvNet(nn.Module):
 
 
 class TCNGaussian(nn.Module):
-    """Causal TCN baseline with independent Gaussian prediction head."""
+    """Causal TCN baseline with independent Gaussian prediction head.
+
+    Also implements the unified pilot distribution API (CH2.5-P02-T03) with
+    the shared spec — scale = ``softplus(raw) + min_scale``, NLL denominator
+    ``mask.sum()``, ``sample_flat`` shaped ``[B, S, P*N]`` and masked by the
+    query mask, 95% interval ``mean +/- Z95 * scale`` — duplicated here so the
+    reference stays standalone (no project imports). The unified methods are
+    behaviorally verified by the project's interface checker.
+    """
+
+    IMPLEMENTATION = "faithful"
+    SOURCE_IDENTITY = (
+        "Causal dilated TCN encoder (Bai et al., 2018) with an independent "
+        "diagonal Gaussian prediction head; this repository's own comparison "
+        "implementation of the declared regular-grid convolutional "
+        "probabilistic baseline with no further simplification"
+    )
+    REQUIRES_TIME_INPUT = False
+    ADAPTER = (
+        "regular-grid assumption: features are concat(X*M, M, context) on the "
+        "observation index grid with no imputation; missing positions enter as "
+        "zeros with the mask channel; real timestamps are ignored"
+    )
+
+    gaussian_kind = "diagonal"
+    lambda_point = 0.1
 
     def __init__(
         self,
@@ -177,3 +206,52 @@ class TCNGaussian(nn.Module):
         if mask is None:
             mask = torch.ones_like(y)
         return (((mean - y) ** 2) * mask).sum() / mask.sum().clamp_min(1.0)
+
+    # -- unified pilot distribution API (CH2.5-P02-T03) --------------------
+
+    def gaussian_params(self, batch) -> Tuple[Tensor, Tensor]:
+        return self.forward(batch.X_obs, batch.M_obs, batch.context)
+
+    def predict_point(self, batch) -> Tensor:
+        mean, _ = self.gaussian_params(batch)
+        return mean.reshape(batch.y_flat.shape)
+
+    def batch_nll(self, batch) -> Tensor:
+        mean, scale = self.gaussian_params(batch)
+        return self.nll(batch.Y_q, mean, scale, batch.M_q)
+
+    def sample_flat(
+        self,
+        batch,
+        nsamples: int = 100,
+        generator: torch.Generator = None,
+    ) -> Tensor:
+        mean, scale = self.gaussian_params(batch)
+        flat_mean = mean.reshape(batch.y_flat.shape)
+        flat_scale = scale.reshape(batch.y_flat.shape)
+        eps = torch.randn(
+            flat_mean.shape[0],
+            int(nsamples),
+            flat_mean.shape[1],
+            device=flat_mean.device,
+            dtype=flat_mean.dtype,
+            generator=generator,
+        )
+        samples = flat_mean.unsqueeze(1) + flat_scale.unsqueeze(1) * eps
+        mask = batch.mq_flat.unsqueeze(1) > 0
+        return torch.where(mask, samples, torch.zeros_like(samples))
+
+    def interval95_flat(self, batch) -> Tuple[Tensor, Tensor]:
+        mean, scale = self.gaussian_params(batch)
+        flat_mean = mean.reshape(batch.y_flat.shape)
+        flat_scale = scale.reshape(batch.y_flat.shape)
+        return flat_mean - Z95 * flat_scale, flat_mean + Z95 * flat_scale
+
+    def loss(self, batch) -> Tensor:
+        mean, _ = self.gaussian_params(batch)
+        return self.batch_nll(batch) + self.lambda_point * self.mse(
+            batch.Y_q, mean, batch.M_q
+        )
+
+    def parameter_count(self) -> int:
+        return int(sum(p.numel() for p in self.parameters() if p.requires_grad))
