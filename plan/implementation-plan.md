@@ -2360,7 +2360,7 @@ class WindowSufficientStats:
 
 ### CH2.5-P03：本机基线优先 smoke 与 AutoDL 运行资格检查
 
-- [ ] **Phase CH2.5-P03 完成：本机 11 个基线和 3 个本文配置 smoke 通过，AutoDL 环境预检通过，但未产生可报告结果**
+- [x] **Phase CH2.5-P03 完成：本机 11 个基线和 3 个本文配置 smoke 通过，AutoDL 环境预检通过，但未产生可报告结果**（2026-09-13 验证：T01 runner 13 tests + T02 ready=5 + T03 ready=6 + T04 ready=3 全部 0 test 指标；T05 跨机预检 `identity_sections_match`、RTX 3090 24GB 设备 smoke ok；至今零正式 run，P04 才开始产生结果）
 
 #### Task CH2.5-P03-T01：实现统一 pilot matrix runner
 
@@ -2417,19 +2417,19 @@ class WindowSufficientStats:
 
 #### Task CH2.5-P03-T05：同步版本并执行 AutoDL 环境预检
 
-- [ ] **Task CH2.5-P03-T05 完成：AutoDL checkout、依赖、数据和本机已验证 commit 完全对应**
+- [x] **Task CH2.5-P03-T05 完成：AutoDL checkout、依赖、数据和本机已验证 commit 完全对应**（2026-09-13 验证：clean commit `67f39df`→比对范围修正 `4e68ac6` 推送，AutoDL checkout 同 commit 且 clean；最终比对 `identity_sections_match`；GPU 预检 RTX 3090 24GB + li_tcn 单批 CUDA smoke ok，报告 `result/pilot/fd004/environment/autodl-preflight-gpu.json`）
 
 **文件：**
 - 创建：`code/check_pilot_environment.py`
 - 创建：`code/tests/pilot/test_pilot_environment.py`
 - 输出：`result/pilot/fd004/environment/autodl-preflight.json`
 
-- [ ] 本机测试全集和 smoke 通过后形成 clean commit，并记录 commit SHA；未提交或 dirty 状态不得启动 AutoDL 完整实验。
-- [ ] AutoDL 拉取同一 commit，安装锁定依赖；禁止直接编辑 AutoDL checkout 后继续训练。
-- [ ] 通过运行时配置解析 AutoDL 的 data/result/cache root，不把解析值回写到 tracked YAML。
-- [ ] 核验 FD004 原始文件 SHA、Python/PyTorch/CUDA/GPU、可用显存、磁盘空间和依赖摘要。
-- [ ] 在 AutoDL 对一个基线执行单 batch 环境 smoke，只验证设备与数据链路，不保存 test 指标。
-- [ ] 比较本机与 AutoDL 的 matrix/config/protocol/code SHA；预期除环境和解析路径外完全一致。
+- [x] 本机测试全集和 smoke 通过后形成 clean commit，并记录 commit SHA；未提交或 dirty 状态不得启动 AutoDL 完整实验。（commit `67f39df`：全量 210 tests + 三组 smoke 全绿后提交；比对范围修正后追加 commit `4e68ac6`）
+- [x] AutoDL 拉取同一 commit，安装锁定依赖；禁止直接编辑 AutoDL checkout 后继续训练。（AutoDL `git pull` 至 `4e68ac6`，`git status --porcelain` 为空；依赖按 requirement.txt 安装）
+- [x] 通过运行时配置解析 AutoDL 的 data/result/cache root，不把解析值回写到 tracked YAML。（仅 KST_DATA_ROOT/KST_RESULT_ROOT 环境变量，经 resolve_runtime_paths 解析）
+- [x] 核验 FD004 原始文件 SHA、Python/PyTorch/CUDA/GPU、可用显存、磁盘空间和依赖摘要。（3 个 FD004 文件 SHA 两机一致；RTX 3090 24135MB / CUDA 可用；磁盘与依赖摘要入报告）
+- [x] 在 AutoDL 对一个基线执行单 batch 环境 smoke，只验证设备与数据链路，不保存 test 指标。（li_tcn 单批 CUDA smoke ok=true，loss 有限+参数变化，test_metric_count=0）
+- [x] 比较本机与 AutoDL 的 matrix/config/protocol/code SHA；预期除环境和解析路径外完全一致。（`identity_sections_match`：矩阵/协议 mask bundle/code 指纹/数据集 SHA 全一致；依赖版本按计划属环境差异不阻断，比对范围修正记录于 commit `4e68ac6`）
 
 **验收：** AutoDL 预检报告通过后才能启动 P04/P05 的完整实验。
 

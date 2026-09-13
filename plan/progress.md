@@ -490,3 +490,24 @@
 - Verification run: validator 输出 `ready=3,failed=0,test_metrics=0`。
 - Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
 - Remaining risk: smoke 只证明代码可运行（计划原文）；KST ProbFlow 的 Student-t 边际 NLL 与 Gaussian copula 采样的分布差异仍是 Phase-3 缺口，本 smoke 验证的是"同源调度"而非"分布同一"。
+
+## 2026-09-13 CH2.5-P03-T05 同步版本并执行 AutoDL 环境预检
+
+- 阶段：S3 Experiments / CH2.5 FD004 单种子预实验
+- 范围：仅完成 `CH2.5-P03-T05`。TDD 新建环境预检脚本与测试、形成 clean commit 并推送、在 AutoDL（无卡模式 + 开卡模式）完成环境核验与跨机比对；未启动任何 P04/P05 正式 run。
+- 新建 `code/check_pilot_environment.py` + `code/tests/pilot/test_pilot_environment.py`（7 项）：报告 schema `pilot-environment-preflight-v1`，记录 git commit/clean、FD004 三文件 SHA、两个矩阵 SHA、协议 mask bundle SHA（result-root 相对）、code 目录树指纹、依赖版本、Python/torch/CUDA/GPU/磁盘段；`--compare` 递归 diff 身份段（矩阵/协议/code/数据集），忽略环境名与解析路径；`--smoke` 对 li_tcn 单批设备链路验证（不产 test 指标）；`--require-gpu` 供最终门禁；无 GPU 机器 GPU 字段记 null 不失败。
+- 版本同步：本机全量 210 tests + 三组 smoke 全绿后 clean commit `67f39df` 推送 origin；T05 执行中发现比对范围过严（依赖版本被误当阻断项），按计划 12.5 "除环境和解析路径外" 原文修正为四身份段，作为 commit `4e68ac6` 推送，AutoDL pull 后重跑预检，本机重跑比对。
+- AutoDL 无卡模式（14 vCPU Xeon 6330）：pilot+ch3 测试子集绿；全量 pytest 在根目录数据测试（MetroPT 原始 CSV 整帧加载）处 OOM 被杀（75% 处，pilot/ch3 已全部通过）——处置为无卡阶段只跑 pilot+ch3 子集，重型数据测试由本机同一 commit 覆盖，跨机一致性由 SHA 比对保证；GPU 预检与设备 smoke 留到开卡。已向用户说明 OOM 原因与加 swap 的可选方案。
+- AutoDL 开卡模式（RTX 3090 24135MB）：`--smoke --require-gpu` 通过——CUDA 可用、li_tcn 单批 CUDA loss 有限+参数变化、test_metric_count=0；最终比对 `identity_sections_match`（矩阵/协议 mask bundle/code 指纹/数据集 SHA 逐项一致）。归档三份报告：`result/pilot/fd004/environment/` 下 local-preflight.json、autodl-preflight-nogpu.json、autodl-preflight-gpu.json（前两份 commit=67f39df，GPU 版=4e68ac6；nogpu 与 gpu 版身份段一致）。
+- 其余说明：AutoDL 镜像 `OMP_NUM_THREADS` 非法值触发 libgomp 一次性警告，不影响执行（smoke 通过为证）。
+
+### Capability-use audit
+
+- Required skills: using-superpowers, executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: using-superpowers, executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: `plan/implementation-plan.md` T05 合同、`pilot_runner` 的 RealProtocolProvider/build_model、requirement.txt 锁定依赖、AutoDL 实例（无卡 + RTX 3090 两模式）、GitHub origin 仓库。
+- Inputs not used and why: 未在 AutoDL 复跑全量 pytest（OOM 后按"本机同一 commit 已全绿 + SHA 比对保证一致"处置，属计划未要求的附加验证）；未启动 P04/P05 训练（预检报告通过是其前置，本轮到此为止）。
+- Artifacts produced: `check_pilot_environment.py`、`test_pilot_environment.py`（7 项）、commit `67f39df` 与 `4e68ac6`（已推送）、三份预检报告、T05 与 Phase CH2.5-P03 状态勾选、本审计记录。
+- Verification run: 先行测试 red → 实现 7 tests 全绿（含 GPU 段 monkeypatch 无 CUDA 用例、compare 漂移三用例、CLI 端到端、真实 li_tcn 单批 smoke）；AutoDL 无卡 pilot+ch3 子集绿、开卡 `--smoke --require-gpu` ok、跨机比对 `identity_sections_match`；比对脚本修正后 `test_pilot_environment.py` 7 passed。
+- Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
+- Remaining risk: 全量 pytest 在小内存无卡实例不可复现（MetroPT/TEP 帧加载 ~数 GB），若 CH3 需要在 AutoDL 复跑全量须先加 swap 或用大内存实例；P04 正式 run 启动前 ProFITi 显存预估（smoke 峰值 15.1GB）需在 3090 24GB 上以正式 nsamples 实测确认；AutoDL checkout 此后不得直接编辑，任何代码变更必须走本机 commit→push→AutoDL pull。
