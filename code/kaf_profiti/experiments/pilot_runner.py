@@ -173,6 +173,8 @@ class RealProtocolProvider:
         requested_rate: float,
         mask_seed: int,
         split_seed: int,
+        num_workers: int = 0,
+        pin_memory: bool = False,
     ):
         from kaf_profiti.experiments.runtime_paths import resolve_runtime_paths
 
@@ -195,6 +197,8 @@ class RealProtocolProvider:
         protocol_dir = self.result_root / _PILOT_ROOT / "protocol" / "masks" / dataset
         self.mask_sha: Dict[str, str] = {}
         self._split_datasets: Dict[str, object] = {}
+        self.num_workers = int(num_workers)
+        self.pin_memory = bool(pin_memory)
         for split in ("train", "valid", "test"):
             window_dataset = getattr(bundle, split)
             lengths = {int(unit): len(group) for unit, group in window_dataset._units.items()}
@@ -263,7 +267,13 @@ class RealProtocolProvider:
         collator = IndustrialCollator()
         return {
             split: DataLoader(
-                dataset, batch_size=batch_size, shuffle=(split == "train"), collate_fn=collator
+                dataset,
+                batch_size=batch_size,
+                shuffle=(split == "train"),
+                collate_fn=collator,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=self.num_workers > 0,
             )
             for split, dataset in self._split_datasets.items()
         }
@@ -295,7 +305,7 @@ def _batch_to_device(batch, device):
     if str(device) == "cpu":
         return batch
     moved = {
-        key: (value.to(device) if torch.is_tensor(value) else value)
+        key: (value.to(device, non_blocking=True) if torch.is_tensor(value) else value)
         for key, value in batch.__dict__.items()
     }
     return type(batch)(**moved)
@@ -594,6 +604,7 @@ class PilotRunner:
         result_root,
         data_root=None,
         device: str = "cpu",
+        num_workers: int | str = 0,
     ):
         from kaf_profiti.experiments.runtime_paths import resolve_runtime_paths
 
@@ -603,6 +614,9 @@ class PilotRunner:
         if device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
+        if num_workers == "auto":
+            num_workers = 4 if torch.cuda.is_available() else 0
+        self.num_workers = int(num_workers)
         self.matrices = list(matrices)
 
     # -- expansion ----------------------------------------------------------
@@ -749,7 +763,13 @@ class PilotRunner:
                     raise RuntimeError(message)
                 continue
             try:
+                # Per-run seeding: model init and loader shuffling must honor the
+                # scientific seed recorded in the manifest.
+                torch.manual_seed(spec.seed)
                 provider = factory(spec, self.data_root, self.result_root)
+                if hasattr(provider, "num_workers"):
+                    provider.num_workers = self.num_workers
+                    provider.pin_memory = str(self.device) == "cuda"
                 run_start = time.perf_counter()
                 model = build_model(
                     spec,

@@ -143,7 +143,9 @@ def _make_loader_recorder():
     executed = []
 
     def trainer(model, batches, spec, provider, device="cpu"):
-        executed.append(spec.key)
+        # torch.initial_seed() proves the runner applied the scientific seed
+        # before building the model for this run.
+        executed.append((spec.key, torch.initial_seed()))
         return {
             "history": [{"epoch": 1}],
             "metrics": {"mae": 0.5, "rmse": 0.7, "test_metric_count": 1},
@@ -182,6 +184,7 @@ def test_execute_runs_all_and_writes_result_relative_manifests(tmp_path):
 
     assert summary["completed_count"] == 6 and summary["failed"] == [] and summary["skipped"] == 0
     assert len(executed) == 6
+    assert {seed for _, seed in executed} == {2026}, "every run must be seeded with the matrix seed"
     manifest_path = (
         tmp_path
         / "result"
@@ -229,7 +232,7 @@ def test_resume_skips_verified_keys_and_reruns_mismatched_or_missing(tmp_path):
 
     assert summary["skipped"] == 4
     assert sorted(summary["completed"]) == sorted([stale_key, broken_key])
-    assert sorted(executed[-2:]) == sorted([stale_key, broken_key])
+    assert sorted(key for key, _ in executed[-2:]) == sorted([stale_key, broken_key])
 
 
 def test_continue_on_error_marks_only_the_failing_key(tmp_path):

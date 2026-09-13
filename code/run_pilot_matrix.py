@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help="auto resolves to cuda when a GPU is visible, else cpu",
     )
+    parser.add_argument(
+        "--num-workers",
+        default="auto",
+        help="DataLoader worker processes; auto resolves to 4 on GPU hosts, else 0",
+    )
     return parser.parse_args()
 
 
@@ -74,6 +79,7 @@ def main() -> int:
         result_root=str(paths.output_root),
         data_root=str(paths.data_root),
         device=args.device,
+        num_workers=args.num_workers,
     )
 
     if args.mode == "dry-run":
