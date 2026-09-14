@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
+
+from kaf_profiti.experiments.masks import TIMELINE_MASK_SCHEMA_VERSION
 from typing import Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -140,7 +142,11 @@ def protocol_section(result_root: Path) -> Dict[str, object]:
     mask_root = result_root / "pilot" / "fd004" / "protocol" / "masks"
     bundles: Dict[str, str] = {}
     if mask_root.is_dir():
-        for path in sorted(mask_root.rglob("*.npz")):
+        # Bundles are schema-versioned in their filenames. Only the active
+        # schema participates in cross-machine identity; stale artifacts from
+        # an incompatible protocol revision are deliberately ignored.
+        active_prefix = f"v{TIMELINE_MASK_SCHEMA_VERSION}_"
+        for path in sorted(mask_root.rglob(f"{active_prefix}*.npz")):
             bundles[path.relative_to(result_root).as_posix()] = _sha256_file(path)
     return {"mask_bundles": bundles}
 

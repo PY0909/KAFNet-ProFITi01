@@ -211,7 +211,8 @@ class RealProtocolProvider:
                 source_split_sha256=self.split_sha256,
             )
             mask_bundle = generate_or_load_timeline_masks(
-                protocol_dir / f"{split}_{mechanism}_{requested_rate:.2f}_seed{mask_seed}.npz",
+                protocol_dir
+                / f"v{config.schema_version}_{split}_{mechanism}_{requested_rate:.2f}_seed{mask_seed}.npz",
                 config,
                 lengths,
                 bundle.num_sensors,
@@ -339,7 +340,7 @@ def _train_one_epoch(model, loader, optimizer, device):
         loss = model.loss(batch)
         loss.backward()
         optimizer.step()
-        total += float(loss)
+        total += loss.detach().item()
         count += 1
     return total / max(count, 1)
 

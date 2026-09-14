@@ -65,10 +65,10 @@ def test_report_records_git_dataset_matrices_protocol_and_code_identity():
 def test_protocol_mask_bundles_are_recorded_when_present():
     report = _build_report()
     bundles = report["protocol"]["mask_bundles"]
-    # Local smoke runs (CH2.5-P03-T02..T04) already generated the shared bundles.
-    assert bundles, "expected the smoke-generated mask bundles to be fingerprinted"
+    # Preflight must only fingerprint active-schema artifacts; on a fresh or
+    # protocol-migrated result root there may be none before the first smoke.
     for relative, sha in bundles.items():
-        assert "cmapss_fd004" in relative and len(sha) == 64
+        assert "cmapss_fd004" in relative and "/v3_" in relative and len(sha) == 64
 
 
 def test_gpu_section_stays_null_without_cuda(monkeypatch):

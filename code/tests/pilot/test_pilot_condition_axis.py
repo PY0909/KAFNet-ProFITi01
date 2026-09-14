@@ -3,11 +3,12 @@
 The first 42 point pilot runs were invalidated because two defects made the
 six missingness conditions indistinguishable in the data: the full-run
 provider factory hardcoded the smoke constants (mixed@0.30) instead of the
-spec's condition, and the timeline mask was never applied to the query span
-(``M_q`` stayed all-ones). These tests pin both wirings, add a runtime
-mismatch guard in ``execute()``, require manifests to record the protocol
-SHA, and verify on the real FD004 protocol that distinct matrix conditions
-produce distinct mask bundles and monotone valid-query fractions.
+spec's condition. Artificial missingness belongs only to history inputs;
+therefore ``M_q`` must remain the base dataset query mask in every condition.
+These tests pin both contracts, add a runtime mismatch guard in ``execute()``,
+require manifests to record the protocol SHA, and verify on the real FD004
+protocol that conditions produce distinct history masks while retaining the
+same query targets and valid-query count.
 """
 
 import json
@@ -99,7 +100,7 @@ def test_smoke_provider_pins_main_condition(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Query-span masking: the timeline mask must reach M_q
+# Input-only masking: the timeline mask must not change query targets
 # ---------------------------------------------------------------------------
 
 
@@ -164,7 +165,7 @@ def _bundle(timeline: np.ndarray) -> TimelineMaskBundle:
     )
 
 
-def test_timeline_dataset_masks_query_span(tmp_path):
+def test_timeline_dataset_masks_history_and_preserves_query_contract(tmp_path):
     timeline = np.array(
         [
             [1, 1, 1],
@@ -177,28 +178,20 @@ def test_timeline_dataset_masks_query_span(tmp_path):
             [1, 1, 1],
         ]
     )
-    dataset = TimelineMaskedWindowDataset(_WindowDataset(len(timeline)), _bundle(timeline))
+    inner = _WindowDataset(len(timeline))
+    dataset = TimelineMaskedWindowDataset(inner, _bundle(timeline))
     assert len(dataset) == 3  # 8 rows - (history 4 + pred 2) + 1
 
     sample = dataset[0]
     assert torch.equal(sample.M_obs, torch.tensor(timeline[0:4], dtype=torch.float32))
-    assert torch.equal(sample.M_q, torch.tensor(timeline[4:6], dtype=torch.float32))
     assert torch.equal(sample.X_obs, torch.ones(4, 3) * sample.M_obs)
-    assert torch.equal(sample.Y_q, torch.full((2, 3), 7.0)), "Y_q must stay untouched"
+    assert torch.equal(sample.M_q, inner[0].M_q), "artificial missingness must not alter M_q"
+    assert torch.equal(sample.Y_q, inner[0].Y_q), "artificial missingness must not alter Y_q"
 
-    sample2 = dataset[2]  # start=2: history rows 2..5, query rows 6..7
+    sample2 = dataset[2]  # start=2: only history rows 2..5 are masked
     assert torch.equal(sample2.M_obs, torch.tensor(timeline[2:6], dtype=torch.float32))
-    assert torch.equal(sample2.M_q, torch.tensor(timeline[6:8], dtype=torch.float32))
-
-
-def test_timeline_dataset_rejects_short_query_span(tmp_path):
-    timeline = np.ones((6, 3), dtype=np.uint8)
-    inner = _WindowDataset(len(timeline))
-    dataset = TimelineMaskedWindowDataset(inner, _bundle(timeline))
-    inner.windows = [(1, 2)]  # query rows [6, 8) fall outside the 6-row timeline
-
-    with pytest.raises(ValueError, match="query span"):
-        dataset[0]
+    assert torch.equal(sample2.M_q, inner[2].M_q)
+    assert torch.equal(sample2.Y_q, inner[2].Y_q)
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +277,7 @@ def test_manifest_records_protocol_sha(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Real-protocol guard: distinct conditions must differ in the data
+# Real-protocol guard: distinct conditions must differ in history inputs only
 # ---------------------------------------------------------------------------
 
 
@@ -314,26 +307,33 @@ def test_real_matrix_conditions_produce_distinct_protocols(tmp_path):
         shas[condition_id] = fingerprint["mask_sha"]["test"]
     assert len(set(shas.values())) == len(conditions), "conditions must not share a bundle"
 
-    fractions = {}
+    history_observation_fractions = {}
+    query_mask_sha = None
     for condition_id, provider in providers.items():
         dataset = provider.datasets()["test"]
         bundle = dataset.bundle.masks
         step = max(1, len(dataset) // 40)
-        valid = total = 0
+        observed = total = 0
         for index in range(0, len(dataset), step):
             sample = dataset[index]
             unit, start = dataset.dataset.windows[index]
-            pred_len = sample.M_q.shape[0]
-            begin = start + dataset.history_len
-            expected = bundle[int(unit)][begin : begin + pred_len]
+            expected_history = bundle[int(unit)][start : start + dataset.history_len]
             assert torch.equal(
-                sample.M_q, torch.tensor(expected, dtype=torch.float32)
+                sample.M_obs, torch.tensor(expected_history, dtype=torch.float32)
             ), (condition_id, index)
-            valid += int(sample.M_q.sum())
-            total += sample.M_q.numel()
-        fractions[condition_id] = valid / total
+            base_sample = dataset.dataset[index]
+            assert torch.equal(sample.M_q, base_sample.M_q), (condition_id, index)
+            assert torch.equal(sample.Y_q, base_sample.Y_q), (condition_id, index)
+            mask_bytes = sample.M_q.detach().cpu().numpy().tobytes()
+            if query_mask_sha is None:
+                query_mask_sha = mask_bytes
+            else:
+                assert mask_bytes == query_mask_sha, "query mask must be shared across conditions"
+            observed += int(sample.M_obs.sum())
+            total += sample.M_obs.numel()
+        history_observation_fractions[condition_id] = observed / total
 
-    assert fractions["point_random_000"] == 1.0
-    assert fractions["point_random_030"] > fractions["point_random_070"]
-    assert 0.55 < fractions["point_random_030"] < 0.80
-    assert 0.15 < fractions["point_random_070"] < 0.45
+    assert history_observation_fractions["point_random_000"] == 1.0
+    assert history_observation_fractions["point_random_030"] > history_observation_fractions["point_random_070"]
+    assert 0.55 < history_observation_fractions["point_random_030"] < 0.80
+    assert 0.15 < history_observation_fractions["point_random_070"] < 0.45

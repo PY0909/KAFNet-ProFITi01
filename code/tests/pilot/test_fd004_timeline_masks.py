@@ -18,6 +18,7 @@ import torch
 
 from kaf_profiti.experiments.datasets import create_protocol_datasets
 from kaf_profiti.experiments.masks import (
+    TIMELINE_MASK_SCHEMA_VERSION,
     TimelineMaskConfig,
     TimelineMaskedWindowDataset,
     generate_or_load_timeline_masks,
@@ -136,7 +137,7 @@ def test_artifact_identity_binds_protocol_fields(tmp_path):
     with np.load(path) as loaded:
         meta = json.loads(str(loaded["meta"].item()))
 
-    assert meta["schema_version"] == 2
+    assert meta["schema_version"] == TIMELINE_MASK_SCHEMA_VERSION
     assert meta["dataset"] == "cmapss_fd004"
     assert meta["split"] == "train"
     assert meta["mechanism"] == "random"
@@ -233,14 +234,10 @@ def test_timeline_masked_window_dataset_slices_canonical_windows(tmp_path):
     expected = masks.masks[unit][start : start + bundle.train.history_len]
     assert np.array_equal(sample.M_obs.numpy().astype(np.uint8), expected)
     assert torch.equal(sample.X_obs, bundle.train[index].X_obs * sample.M_obs)
-    # The query span continues the same observation process (2026-09-14
-    # condition-axis fix): M_q is the timeline's query slice, targets that
-    # fall on masked rows are excluded by the unified mask contract, and the
-    # stored Y_q values themselves stay untouched.
-    pred_len = sample.M_q.shape[0]
-    query_begin = start + bundle.train.history_len
-    expected_query = masks.masks[unit][query_begin : query_begin + pred_len]
-    assert np.array_equal(sample.M_q.numpy().astype(np.uint8), expected_query)
+    # Artificial missingness applies only to the history input. All conditions
+    # must retain the base query mask and future target values, so MAE/RMSE are
+    # computed on the same future positions.
+    assert torch.equal(sample.M_q, bundle.train[index].M_q)
     assert torch.equal(sample.Y_q, bundle.train[index].Y_q)
-    # Mask actually drops something at this rate on this engine.
+    # Mask actually drops something from the history input at this rate.
     assert (sample.M_obs == 0).any()

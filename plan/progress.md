@@ -555,3 +555,22 @@
 - Verification run: 新测试先 red（ImportError/_build_smoke_provider 缺失、M_q 断言失败）后 green；全量 `code/tests/` 219 passed。
 - Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
 - Remaining risk: 重跑前 AutoDL 侧 runs 目录必须删除（否则 resume 误判旧 manifest 已验证跳过重跑）；预检两份报告须在 pull 后重新生成比对（code 指纹已变化）；训练动力学异常（valid 自 epoch 3 恶化）修复后重看，T03 必须如实呈现。
+
+## 2026-09-14 P04 复盘修订：查询段掩蔽判定为误判（用户改判）
+
+- 阶段：S3 Experiments / CH2.5 FD004 单种子预实验
+- 范围：修订上一条审计的根因结论。真正的缺陷只有根因 A（`_build_provider` 硬编码 mixed@0.30）；原根因 B（查询段未掩蔽）为误判——人工缺失协议只作用于历史输入 `M_obs/X_obs`，`Y_q/M_q` 与 valid count 跨条件恒定是统一未来目标评测的公平性必需，valid_count 恒 5,703,810 是正确信号而非异常。
+- 代码修订（用户完成，本条目核验通过）：查询段掩蔽回退（`TimelineMaskedWindowDataset` 只替换历史段）；timeline mask schema 升 v3 且文件名加 `v3_` 前缀（旧 v2 bundle 不被静默复用、预检只指纹活跃 schema）；`loss.detach().item()`；防护测试改为双向断言——不同条件 history mask SHA 互异 + 历史可观测率 1.0 > 030 > 070 单调 + `M_q/Y_q` 与 query mask 逐字节跨条件恒定；计划 T01/T02 的 `condition_axis_effective` 定义同步补全为双向。
+- 本核验补充修正：复盘文档 §2 一行残留旧口径（"不同 valid_count"）已改为"history mask SHA 互异 + query 侧逐字节恒定"；`check_pilot_environment.py` import 归位。
+- 有效信号重新解读：首轮 42 run 中基线跨条件 bit 级相同 + protocol 目录仅一套 bundle 仍是根因 A 的确凿证据；RMSE≈0.99/MAE≈0.83 均值预测水平与 valid 自 epoch 3 恶化（best checkpoint 在 epoch 3）仍是 T03 须如实呈现的训练动力学问题。
+
+### Capability-use audit
+
+- Required skills: verification, verification-before-completion
+- Skills actually used: verification, verification-before-completion
+- Inputs consumed: 用户完成的八文件修订、`git diff` 全量核对、FD004 防护测试。
+- Inputs not used and why: 未改动用户的核心改判（评测语义决定权在协议 owner）；未重跑 42 run（修复验证留待 AutoDL）。
+- Artifacts produced: 复盘文档一行修正、import 归位、本审计条目、全量测试复跑。
+- Verification run: 全量 `code/tests/` 218 passed（含修订后双向防护测试）。核验中发现并处置一处陈旧 artifact：15:20 生成的三个 v3 mixed bundle 携带中间代码状态下的 split SHA（4c62…，与确定性重算的 61c7… 不符），占据确定性路径导致 mixed@0.30 provider 构建被严格校验硬拒——确认 split SHA 两次重算完全一致（排除非确定性）后删除，重建 bundle 携带正确 SHA 且 realized≈0.29 达标。
+- Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
+- Remaining risk: 同上一条——AutoDL 侧 runs 删除 + 重跑预检 + 重跑 42 run；valid 恶化现象在修复后首轮重看。

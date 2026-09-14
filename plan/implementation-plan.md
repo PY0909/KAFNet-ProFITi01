@@ -2443,14 +2443,14 @@ class WindowSufficientStats:
 
 - [ ] **Task CH2.5-P04-T01 完成：五个基线 × 六条件全部完成且共享公平性 SHA**
 
-> 2026-09-14 撤销：首轮 42 run 因条件轴失效全部作废（`_build_provider` 硬编码 mixed@0.30 + 查询段从未掩蔽，六条件数据零差异），复盘见 `plan/review/p04-condition-axis-invalid-review.md`。验收清单新增 `condition_axis_effective` 必查项。
+> 2026-09-14 撤销：首轮 42 run 因条件轴失效全部作废（`_build_provider` 硬编码 mixed@0.30，六条件共用一份 history mask），复盘见 `plan/review/p04-condition-axis-invalid-review.md`。整改后，人工缺失只改变历史 `M_obs/X_obs`，`Y_q/M_q` 与 valid count 在全部条件间保持一致；验收清单新增 `condition_axis_effective` 必查项。
 
 - [ ] dry-run 确认 `expected=30,new=30`，并人工复核条件与执行顺序（含 mask bundle 数 = 条件组合数）。
 - [ ] 仅在 AutoDL 执行完整 train/validation/test；本机不得生成可冒充完整实验的同 key run。
 - [ ] 按模型独立运行，单个失败不停止其余模型；失败 key 修复后单独 resume。
 - [ ] checkpoint 只由 validation MAE 选择，完整 test 只执行一次。
 - [ ] 每个 run 保存 run ID、seed、dataset、model、condition、split/mask/normalization/target SHA、history、best checkpoint、prediction、metrics 和环境信息。
-- [ ] validate-only 检查 `completed=30,duplicate=0,missing=0,test_count_error=0,condition_axis_effective`。
+- [ ] validate-only 检查 `completed=30,duplicate=0,missing=0,test_count_error=0,condition_axis_effective`；其中 `condition_axis_effective` 必须同时证明不同条件的 history mask SHA 不同/历史可观测率符合设置，且所有条件的 query window ID、`M_q`、target SHA 与 valid count 完全一致。
 
 **验收：** 30 个基线结果齐全后才允许执行本文模型。
 
@@ -2464,7 +2464,7 @@ class WindowSufficientStats:
 - [ ] 仅在与 30 个基线相同的 AutoDL 环境执行完整训练和效率测量。
 - [ ] Linear 与 MLP 除 head 类型外共享编码器、训练预算、数据和评价配置。
 - [ ] checkpoint 只由 validation MAE 选择，完整 test 只执行一次。
-- [ ] validate-only 检查 `completed=12,duplicate=0,missing=0,fairness_mismatch=0,condition_axis_effective`。
+- [ ] validate-only 检查 `completed=12,duplicate=0,missing=0,fairness_mismatch=0,condition_axis_effective`；其中不同条件只能改变历史输入 mask，不得改变 query window ID、`M_q`、target SHA 或 valid count。
 
 **验收：** 42 个 point pilot keys 全部闭合；任一缺格时不生成排序结论。
 
