@@ -511,3 +511,25 @@
 - Verification run: 先行测试 red → 实现 7 tests 全绿（含 GPU 段 monkeypatch 无 CUDA 用例、compare 漂移三用例、CLI 端到端、真实 li_tcn 单批 smoke）；AutoDL 无卡 pilot+ch3 子集绿、开卡 `--smoke --require-gpu` ok、跨机比对 `identity_sections_match`；比对脚本修正后 `test_pilot_environment.py` 7 passed。
 - Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
 - Remaining risk: 全量 pytest 在小内存无卡实例不可复现（MetroPT/TEP 帧加载 ~数 GB），若 CH3 需要在 AutoDL 复跑全量须先加 swap 或用大内存实例；P04 正式 run 启动前 ProFITi 显存预估（smoke 峰值 15.1GB）需在 3090 24GB 上以正式 nsamples 实测确认；AutoDL checkout 此后不得直接编辑，任何代码变更必须走本机 commit→push→AutoDL pull。
+
+## 2026-09-14 CH2.5-P04-T01/T02 42 个点预测 pilot run（含执行中两轮修复）
+
+- 阶段：S3 Experiments / CH2.5 FD004 单种子预实验
+- 范围：完成 `CH2.5-P04-T01`（30 基线）与 `CH2.5-P04-T02`（12 KST-Light），含执行中由用户发现的两处 runner 缺陷修复（commit `c7b9114`、`19461c0`）。T03 汇总未开始。
+- 执行环境：AutoDL RTX 3090 24GB，commit `19461c0`，单轮 `run_pilot_matrix.py --mode full --matrix point`，42/42 completed、0 failed；总 wall-clock 约 14.4 小时。
+- 执行中修复一（用户发现：nvidia-smi 无进程）：默认训练器写死 `torch.device("cpu")`、`build_model` 未 `.to(device)`、`PilotRunner.device` 未送达 trainer——中断无效轮次，修复为三处设备接线 + optimizer 移出 epoch 循环（AdamW 动量此前每 epoch 被重置）+ 补 `batch_nll_rows` API（`_test_metrics` 此前引用不存在的方法），commit `c7b9114`。
+- 执行中修复二（用户诊断：DataLoader num_workers=0 + 无 pin_memory；复核中发现更严重问题）：`execute()` 从未按 run 播种科学 seed，先前执行的 run 协议无效——修复为每 run `torch.manual_seed(spec.seed)`（测试以 `torch.initial_seed()==2026` 锁定）+ DataLoader num_workers auto（GPU 4）/pin_memory/persistent_workers + `non_blocking` 拷贝，commit `19461c0`，重跑预检身份比对通过后才重启正式执行。
+- 本机 validate-only（runner `_verified_specs` 对同步回的 artifact 副本）：`expanded=42, unique=42, verified=42, baseline=30, ours=12（linear 6 + mlp 6）, duplicate=0, missing=0, fairness_mismatch=0`；全部 `status=completed, device=cuda, test_metric_count=1`；42 份 metrics MAE/RMSE 全有限非负、checkpoint 齐全、history 80 epoch 连续。
+- 有效性证据：`pilot_point_run.log` 恰好 42 条 `elapsed_sec` 完成事件，证明 42 个 run 全部在 `19461c0` 单轮执行中产生，无任何 run 经 resume 继承自种子修复前的无效轮次；执行顺序为 30 基线全部完成后才出现 KST-Light 事件（gate 生效的运行时证据）。
+- 效率观察（供 T03 效率视图）：li_tcn ~1200s、ff_gru ~1170s、masked_tcn ~1160s、gru_d ~1180s、ode_rnn ~1710s（Euler 子步随 batch 最大间隔缩放）、kst_light|linear ~1910s（多尺度 KAF 编码器更重）/mlp 相当。
+
+### Capability-use audit
+
+- Required skills: executing-plans, verification, verification-before-completion, debugging
+- Skills actually used: executing-plans, verification, verification-before-completion, debugging
+- Inputs consumed: P03 runner/预检闭环、两个 tracked 矩阵、FD004 数据、AutoDL GPU 实例、用户提供的 nvidia-smi/pgrep 诊断与 DataLoader 分析、42 run 事件日志与 artifact 副本。
+- Inputs not used and why: 未读取任何 run 的 test 指标做模型间比较或选择（T03 之前禁止形成排序结论）；未将 result/ 入库（.gitignore 约定，manifest SHA 核对代替）；未勾 Phase CH2.5-P04 框（T03 未完成）。
+- Artifacts produced: AutoDL 42 run 目录（manifest/history/metrics/checkpoint）同步至 `result/pilot/fd004/runs/`、commit `c7b9114` 与 `19461c0`（已推送，含 15+7 项 runner/预检测试更新）、T01/T02 状态勾选与本审计记录。
+- Verification run: 两轮修复各自先 red 后绿（种子断言 {2026}、meta 设备断言）；本机 validate-only 42/42 全绿（上）；`grep -c elapsed_sec = 42`。
+- Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
+- Remaining risk: manifest 未记录协议 SHA 字段（公平性由共享 mask bundle 路径 + shared_artifacts SHA 结构性保证，T03 汇总时从 bundle 文件补记 provenance）；单种子结果不得进入论文主表；P05 ProFITi 显存须以正式 nsamples 实测。

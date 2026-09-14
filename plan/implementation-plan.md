@@ -2441,26 +2441,26 @@ class WindowSufficientStats:
 
 #### Task CH2.5-P04-T01：执行 30 个点预测基线 run
 
-- [ ] **Task CH2.5-P04-T01 完成：五个基线 × 六条件全部完成且共享公平性 SHA**
+- [x] **Task CH2.5-P04-T01 完成：五个基线 × 六条件全部完成且共享公平性 SHA**（2026-09-14 验证：AutoDL commit 19461c0 单轮执行，本机 validate-only `completed=30,duplicate=0,missing=0,test_count_error=0,fairness_mismatch=0`，全部 `device=cuda`）
 
-- [ ] dry-run 确认 `expected=30,new=30`，并人工复核条件与执行顺序。
-- [ ] 仅在 AutoDL 执行完整 train/validation/test；本机不得生成可冒充完整实验的同 key run。
-- [ ] 按模型独立运行，单个失败不停止其余模型；失败 key 修复后单独 resume。
-- [ ] checkpoint 只由 validation MAE 选择，完整 test 只执行一次。
-- [ ] 每个 run 保存 run ID、seed、dataset、model、condition、split/mask/normalization/target SHA、history、best checkpoint、prediction、metrics 和环境信息。
-- [ ] validate-only 检查 `completed=30,duplicate=0,missing=0,test_count_error=0`。
+- [x] dry-run 确认 `expected=30,new=30`，并人工复核条件与执行顺序。
+- [x] 仅在 AutoDL 执行完整 train/validation/test；本机不得生成可冒充完整实验的同 key run。
+- [x] 按模型独立运行，单个失败不停止其余模型；失败 key 修复后单独 resume。
+- [x] checkpoint 只由 validation MAE 选择，完整 test 只执行一次。
+- [x] 每个 run 保存 run ID、seed、dataset、model、condition、split/mask/normalization/target SHA、history、best checkpoint、prediction、metrics 和环境信息。
+- [x] validate-only 检查 `completed=30,duplicate=0,missing=0,test_count_error=0`。
 
 **验收：** 30 个基线结果齐全后才允许执行本文模型。
 
 #### Task CH2.5-P04-T02：执行 12 个 KST-Light run
 
-- [ ] **Task CH2.5-P04-T02 完成：Linear/MLP × 六条件全部完成且无额外信息输入**
+- [x] **Task CH2.5-P04-T02 完成：Linear/MLP × 六条件全部完成且无额外信息输入**（2026-09-14 验证：执行顺序为 30 基线全部完成后才出现 KST-Light 事件；本机 validate-only `completed=12,duplicate=0,missing=0,fairness_mismatch=0`）
 
-- [ ] baseline-first gate 验证 30/30 后调度 KST-Light。
-- [ ] 仅在与 30 个基线相同的 AutoDL 环境执行完整训练和效率测量。
-- [ ] Linear 与 MLP 除 head 类型外共享编码器、训练预算、数据和评价配置。
-- [ ] checkpoint 只由 validation MAE 选择，完整 test 只执行一次。
-- [ ] validate-only 检查 `completed=12,duplicate=0,missing=0,fairness_mismatch=0`。
+- [x] baseline-first gate 验证 30/30 后调度 KST-Light。
+- [x] 仅在与 30 个基线相同的 AutoDL 环境执行完整训练和效率测量。
+- [x] Linear 与 MLP 除 head 类型外共享编码器、训练预算、数据和评价配置。
+- [x] checkpoint 只由 validation MAE 选择，完整 test 只执行一次。
+- [x] validate-only 检查 `completed=12,duplicate=0,missing=0,fairness_mismatch=0`。
 
 **验收：** 42 个 point pilot keys 全部闭合；任一缺格时不生成排序结论。
 
