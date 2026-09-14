@@ -280,6 +280,25 @@ class RealProtocolProvider:
 
 
 def _build_provider(spec: PilotRunSpec, data_root: Path, result_root: Path) -> RealProtocolProvider:
+    """Full-run provider: the spec's own condition drives the mask protocol."""
+
+    return RealProtocolProvider(
+        data_root=data_root,
+        result_root=result_root,
+        dataset=spec.dataset,
+        history_len=spec.history_len,
+        pred_len=spec.pred_len,
+        stride=spec.stride,
+        mechanism=spec.missing_mode,
+        requested_rate=spec.target_missing_rate,
+        mask_seed=spec.mask_seed,
+        split_seed=spec.split_seed,
+    )
+
+
+def _build_smoke_provider(spec: PilotRunSpec, data_root: Path, result_root: Path) -> RealProtocolProvider:
+    """Smoke provider: pinned to the main condition regardless of the spec."""
+
     return RealProtocolProvider(
         data_root=data_root,
         result_root=result_root,
@@ -767,6 +786,45 @@ class PilotRunner:
                 # scientific seed recorded in the manifest.
                 torch.manual_seed(spec.seed)
                 provider = factory(spec, self.data_root, self.result_root)
+                fingerprint = (
+                    provider.protocol_fingerprint()
+                    if hasattr(provider, "protocol_fingerprint")
+                    else None
+                )
+                protocol_sha = None
+                if fingerprint is not None:
+                    mismatched = []
+                    if str(fingerprint.get("mechanism")) != spec.missing_mode:
+                        mismatched.append(
+                            f"mechanism {fingerprint.get('mechanism')!r} != "
+                            f"spec {spec.missing_mode!r}"
+                        )
+                    observed_rate = fingerprint.get("requested_rate")
+                    if observed_rate is None or abs(
+                        float(observed_rate) - spec.target_missing_rate
+                    ) > 1e-9:
+                        mismatched.append(
+                            f"requested_rate {observed_rate!r} != "
+                            f"spec {spec.target_missing_rate!r}"
+                        )
+                    if mismatched:
+                        raise RuntimeError(
+                            f"provider condition mismatch for {spec.key}: "
+                            + "; ".join(mismatched)
+                        )
+                    protocol_sha = {
+                        key: fingerprint[key]
+                        for key in (
+                            "mechanism",
+                            "requested_rate",
+                            "mask_seed",
+                            "split_seed",
+                            "split_sha256",
+                            "normalization_sha256",
+                            "mask_sha",
+                        )
+                        if key in fingerprint
+                    }
                 if hasattr(provider, "num_workers"):
                     provider.num_workers = self.num_workers
                     provider.pin_memory = str(self.device) == "cuda"
@@ -793,14 +851,20 @@ class PilotRunner:
                     ),
                     flush=True,
                 )
-                self._write_manifest(spec, status="completed", error="", outcome=outcome)
+                self._write_manifest(
+                    spec, status="completed", error="", outcome=outcome,
+                    protocol_sha=protocol_sha,
+                )
                 completed.append(spec.key)
                 verified[spec.key] = {}
                 gate_missing = self._gate_violations(specs, verified)
             except Exception as error:  # noqa: BLE001 — one key failing must not stop the batch
                 failed.append(spec.key)
                 errors[spec.key] = f"{type(error).__name__}: {error}"
-                self._write_manifest(spec, status="failed", error=errors[spec.key], outcome=None)
+                self._write_manifest(
+                    spec, status="failed", error=errors[spec.key], outcome=None,
+                    protocol_sha=protocol_sha,
+                )
                 print(
                     json.dumps(
                         {"event": "run", "key": spec.key, "status": "failed", "error": errors[spec.key]},
@@ -841,7 +905,12 @@ class PilotRunner:
             artifacts[filename.split(".")[0]] = str((run_dir / filename).relative_to(self.result_root))
 
     def _write_manifest(
-        self, spec: PilotRunSpec, status: str, error: str, outcome: Optional[Dict]
+        self,
+        spec: PilotRunSpec,
+        status: str,
+        error: str,
+        outcome: Optional[Dict],
+        protocol_sha: Optional[Dict] = None,
     ) -> None:
         run_dir = self._runs_dir() / spec.key
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -874,6 +943,7 @@ class PilotRunner:
             "status": status,
             "error": error,
             "device": str(outcome.get("device", self.device)) if outcome else self.device,
+            "protocol_sha": protocol_sha,
             "shared_artifacts": self._shared_artifacts(),
             "artifacts": artifacts,
             "test_metric_count": 1 if status == "completed" else 0,
@@ -939,7 +1009,9 @@ class PilotRunner:
                 "model_label": spec_template.model_label,
             }
             try:
-                resolved = provider or _build_provider(spec_template, self.data_root, self.result_root)
+                resolved = provider or _build_smoke_provider(
+                    spec_template, self.data_root, self.result_root
+                )
                 spec = _with_smoke_dims(
                     spec_template,
                     hidden_dim,

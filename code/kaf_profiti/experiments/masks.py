@@ -376,7 +376,11 @@ class TimelineMaskedWindowDataset(Dataset):
     The mask for window ``index`` is the bundle slice
     ``masks[unit][start : start + history_len]`` where ``(unit, start)`` is the
     dataset's canonical window record, so every overlapping window reads the
-    observation state of the same engine timeline rows.
+    observation state of the same engine timeline rows. The slice continues
+    into the query span ``[start + history_len, start + history_len +
+    pred_len)`` which replaces ``M_q`` — missing query targets are excluded
+    from losses and metrics by the unified mask contract, never hidden inside
+    ``Y_q``.
     """
 
     def __init__(self, dataset: Dataset, bundle: TimelineMaskBundle):
@@ -398,11 +402,29 @@ class TimelineMaskedWindowDataset(Dataset):
     def __getitem__(self, index: int):
         sample = self.dataset[index]
         unit, start = self.dataset.windows[index]
-        mask = torch.tensor(
-            self.bundle.masks[int(unit)][start : start + self.history_len],
-            dtype=torch.float32,
+        timeline = self.bundle.masks[int(unit)]
+        obs_mask = torch.tensor(
+            timeline[start : start + self.history_len], dtype=torch.float32
         )
-        return replace(sample, M_obs=mask, X_obs=sample.X_obs * mask)
+        # The query span continues the same observation process: the mask rows
+        # right after the history window decide which future targets exist
+        # (M_q), so valid-query counts must track the condition's missing rate.
+        pred_len = int(sample.M_q.shape[0])
+        query_end = start + self.history_len + pred_len
+        query_slice = timeline[start + self.history_len : query_end]
+        if query_slice.shape != sample.M_q.shape:
+            raise ValueError(
+                f"timeline mask for engine {unit} cannot cover the query span of "
+                f"window {index}: needs rows [{start + self.history_len}, "
+                f"{query_end}) but the timeline has {len(timeline)} rows"
+            )
+        query_mask = torch.tensor(query_slice, dtype=torch.float32)
+        return replace(
+            sample,
+            M_obs=obs_mask,
+            X_obs=sample.X_obs * obs_mask,
+            M_q=query_mask,
+        )
 
 
 def generate_masks_array(

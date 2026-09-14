@@ -533,3 +533,25 @@
 - Verification run: 两轮修复各自先 red 后绿（种子断言 {2026}、meta 设备断言）；本机 validate-only 42/42 全绿（上）；`grep -c elapsed_sec = 42`。
 - Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
 - Remaining risk: manifest 未记录协议 SHA 字段（公平性由共享 mask bundle 路径 + shared_artifacts SHA 结构性保证，T03 汇总时从 bundle 文件补记 provenance）；单种子结果不得进入论文主表；P05 ProFITi 显存须以正式 nsamples 实测。
+
+## 2026-09-14 P04 条件轴失效复盘与修复（首轮 42 run 作废）
+
+- 阶段：S3 Experiments / CH2.5 FD004 单种子预实验
+- 范围：用户审阅指标发现首轮 42 run 数据无效；完成根因定位、复盘文档、TDD 修复与防护测试。T01/T02 勾选撤销，runs 已删除，待重跑。
+- 数据无效判定（用户观察，逐条核实）：5 基线跨 6 条件指标 bit 级相同（kst_light 仅第 4 位小数且方向随机 = CUDA 非确定性噪声）；valid_count 恒 5,703,810 满额；protocol 目录仅一套 mixed_0.30 bundle；RMSE≈0.99/MAE≈0.83 处于标准化数据均值预测水平。
+- 根因 A：`_build_provider` 硬编码 smoke 常量 mixed@0.30，`spec.missing_mode/target_missing_rate` 从未进入数据路径——六条件数据零差异。根因 B：`TimelineMaskedWindowDataset` 只掩蔽历史段，查询段从未切片到 `M_q`——valid_count 与缺失率无关。
+- 复盘：`plan/review/p04-condition-axis-invalid-review.md`——防线逐层失守分析（fake provider 测试零断言真实工厂接线、smoke 只测主条件、一致性检查检测不了系统性错误、mask bundle 数量等免费信号被忽略）+ 五项整改。
+- TDD 修复（先 red 后 green）：`_build_provider` 改用 spec 条件；新增 `_build_smoke_provider` 钉住 smoke 主条件；`TimelineMaskedWindowDataset.__getitem__` 将查询段切片到 `M_q`（Y_q 保持原值，缺失由统一 mask 合同排除；查询切片越界显式报错）；`execute()` 运行时断言 provider 指纹 mechanism/rate 与 spec 一致（未来接线错误在第一个 run 即失败）；manifest 新增 `protocol_sha`（split/normalization/三 split mask SHA + 条件身份）。
+- 防护测试：新增 `code/tests/pilot/test_pilot_condition_axis.py`（7 项）——两工厂接线（monkeypatch 记录）、合成 timeline 的查询段掩蔽与越界拒绝、execute 条件失配拒绝、manifest protocol_sha、真实 FD004 上四条件（random 0/30/70 + low_rate 30）bundle SHA 互异 + `M_q` 等于 timeline 查询切片 + valid 比例 `1.0 > ~0.7 > ~0.3` 单调。旧测试 `test_timeline_masked_window_dataset_slices_canonical_windows` 的 "targets stay fully observed" 断言恰为根因 B 的固化，按新契约更新为查询切片断言。
+- 验收条款修订：P04-T01/T02 validate-only 增加 `condition_axis_effective` 必查项；dry-run 人工复核增加 mask bundle 数 = 条件组合数。
+
+### Capability-use audit
+
+- Required skills: using-superversers, executing-plans, test-driven-development, verification, verification-before-completion, debugging
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion, debugging
+- Inputs consumed: 用户提供的四条指标异常观察（本次无效判定的唯一来源）、42 run artifact 副本、mask bundle 文件、`masks.py`/`pilot_runner.py`/`cmapss.py` 源码、FD004 原始数据。
+- Inputs not used and why: 未尝试从旧 run 挽救任何结论（数据层无效，不可修补）；未修改矩阵 YAML（矩阵设计正确，错在接线）；未勾任何完成框（T01/T02 撤销，Phase 框未勾）。
+- Artifacts produced: 复盘文档、修复三文件（`masks.py`、`pilot_runner.py`）、新测试文件（7 项）+ 旧测试契约更新、计划撤销注记、runs 目录删除、本审计记录。
+- Verification run: 新测试先 red（ImportError/_build_smoke_provider 缺失、M_q 断言失败）后 green；全量 `code/tests/` 219 passed。
+- Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
+- Remaining risk: 重跑前 AutoDL 侧 runs 目录必须删除（否则 resume 误判旧 manifest 已验证跳过重跑）；预检两份报告须在 pull 后重新生成比对（code 指纹已变化）；训练动力学异常（valid 自 epoch 3 恶化）修复后重看，T03 必须如实呈现。
