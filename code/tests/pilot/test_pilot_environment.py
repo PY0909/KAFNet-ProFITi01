@@ -113,8 +113,11 @@ def test_compare_flags_identity_drift():
 
 
 @_requires_fd004
-def test_single_batch_smoke_verifies_device_link_without_test_metrics():
-    report = _build_report(include_smoke=True)
+def test_single_batch_smoke_verifies_device_link_without_test_metrics(tmp_path):
+    # A fresh result root: the smoke itself must generate the v3 mask bundles
+    # and the report must record them, so a just-provisioned machine (AutoDL
+    # before its first training run) produces a comparable protocol section.
+    report = _build_report(include_smoke=True, result_root=tmp_path / "result")
 
     smoke = report["environment_smoke"]
     assert smoke["ok"] is True
@@ -123,6 +126,9 @@ def test_single_batch_smoke_verifies_device_link_without_test_metrics():
     assert smoke["params_changed"] is True
     assert smoke["test_metric_count"] == 0
     assert smoke["device"] in ("cpu", "cuda")
+    bundles = report["protocol"]["mask_bundles"]
+    assert bundles, "smoke-generated v3 bundles must be fingerprinted in the same report"
+    assert all("/v3_" in relative for relative in bundles)
 
 
 @_requires_fd004

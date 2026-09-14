@@ -244,6 +244,12 @@ def build_report(
     import platform
 
     repo_root = Path(repo_root)
+    # The smoke must run before the protocol section is captured: on a
+    # just-provisioned machine it generates the active-schema mask bundles,
+    # and the report must fingerprint what the smoke itself created.
+    environment_smoke = (
+        single_batch_smoke(repo_root, data_root, result_root) if include_smoke else None
+    )
     report: Dict[str, object] = {
         "schema": _SCHEMA,
         "environment": environment,
@@ -259,11 +265,9 @@ def build_report(
         "matrices": matrix_section(repo_root),
         "protocol": protocol_section(Path(result_root)),
         "code_fingerprint": code_fingerprint(repo_root),
-        "environment_smoke": None,
+        "environment_smoke": environment_smoke,
         "test_metric_count": 0,
     }
-    if include_smoke:
-        report["environment_smoke"] = single_batch_smoke(repo_root, data_root, result_root)
     return report
 
 
