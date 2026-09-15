@@ -81,13 +81,6 @@ LEGACY_ALLOWLIST: dict[tuple[str, int, str], LegacyException] = dict(
             "CH3-P05",
         ),
         _legacy(
-            "code/tests/conftest.py",
-            13,
-            'os.environ["KST_DATA_ROOT"] = "/root/autodl-tmp/dataset"',
-            "Pre-CH3 test fixture default.",
-            "CH3-P05",
-        ),
-        _legacy(
             "code/tests/test_cmapss_data.py",
             14,
             'DATA_ROOT = Path(os.environ.get("KST_DATA_ROOT", "/root/autodl-tmp/dataset"))',

@@ -100,9 +100,17 @@ def linear_trend_floor(x, t_obs, t_q):
 
 
 def predictor_floors(x, y, t_obs, t_q, train_mean):
+    """History-only floors in raw physical units.
+
+    ``zero`` is the STANDARDIZED zero — predicting each channel's train mean —
+    matching the plan's zero-MAE reference (§13.1.1: 0.9623 = E|z|). A literal
+    absolute-zero prediction in raw space is dominated by the mean/std offset
+    and is recorded as ``absolute_zero`` for audit only, never as a gate
+    candidate.
+    """
     predictions = {
-        "zero": np.zeros_like(y),
-        "train_mean": np.broadcast_to(train_mean[None, None, :], y.shape).copy(),
+        "zero": np.broadcast_to(train_mean[None, None, :], y.shape).copy(),
+        "absolute_zero": np.zeros_like(y),
         "window_mean": np.repeat(x.mean(axis=1, keepdims=True), y.shape[1], axis=1),
         "persistence": np.repeat(x[:, -1:, :], y.shape[1], axis=1),
         "linear_trend": linear_trend_floor(x, t_obs, t_q),
@@ -111,7 +119,13 @@ def predictor_floors(x, y, t_obs, t_q, train_mean):
 
 
 def evaluate_split_floors(predictions, y, std):
-    """Raw per-channel metrics + standardized global micro metrics."""
+    """Raw-unit per-channel metrics + single-standardization micro metrics.
+
+    ``predictions`` and ``y`` must be in RAW physical units: the per-channel
+    errors keep their physical meaning and the standardized micro view divides
+    by the train std exactly ONCE (the caller must not pass pre-standardized
+    arrays, which would standardize twice).
+    """
     error = np.abs(predictions - y)
     squared = (predictions - y) ** 2
     flat_error = error.reshape(-1, y.shape[-1])
@@ -120,41 +134,49 @@ def evaluate_split_floors(predictions, y, std):
     return {
         "mae": float(error.mean()),
         "rmse": float(np.sqrt(squared.mean())),
+        "per_channel_units": "raw_physical",
         "per_channel": {
             "mae": [float(v) for v in flat_error.mean(axis=0)],
             "rmse": [float(v) for v in np.sqrt(flat_squared.mean(axis=0))],
         },
         "std_micro": {
             "mae": float(std_error.mean()),
-            "rmse": float(np.sqrt(((predictions - y) / std[None, None, :]) ** 2).mean()),
+            "rmse": float(np.sqrt((std_error ** 2).mean())),
         },
         "elements": int(y.size),
     }
 
 
 def evaluate_learnability_gate(valid_floors, channel_count):
-    """Gate: one history-only floor >=10% better than zero AND >=5/7 channels."""
+    """Gate: ONE history-only floor must both improve micro MAE by >=10% and
+    improve >=5/7 channels — a union across predictors never qualifies."""
     zero_mae = valid_floors["zero"]["std_micro"]["mae"]
     zero_per_channel = np.array(valid_floors["zero"]["per_channel"]["mae"])
-    best_name, best_improvement = None, -np.inf
-    improved = np.zeros(channel_count, dtype=bool)
+    per_predictor = {}
+    best_name, best_improvement, best_channels = None, -np.inf, -1
     for name, entry in valid_floors.items():
-        if name == "zero":
+        if name in ("zero", "absolute_zero"):  # absolute_zero is audit-only
             continue
         improvement = 1.0 - entry["std_micro"]["mae"] / zero_mae
-        if improvement > best_improvement:
-            best_name, best_improvement = name, improvement
-        improved |= np.array(entry["per_channel"]["mae"]) < zero_per_channel
-    passed = best_improvement >= REQUIRED_IMPROVEMENT and int(improved.sum()) >= REQUIRED_CHANNELS
+        improved = int((np.array(entry["per_channel"]["mae"]) < zero_per_channel).sum())
+        qualifies = improvement >= REQUIRED_IMPROVEMENT and improved >= REQUIRED_CHANNELS
+        per_predictor[name] = {
+            "improvement": float(improvement),
+            "improved_channels": improved,
+            "qualifies": bool(qualifies),
+        }
+        if qualifies and improvement > best_improvement:
+            best_name, best_improvement, best_channels = name, improvement, improved
     return {
         "zero_mae_std_micro": zero_mae,
         "best_predictor": best_name,
-        "best_improvement": float(best_improvement),
-        "improved_channels": int(improved.sum()),
+        "best_improvement": float(best_improvement) if best_name else None,
+        "improved_channels": int(best_channels) if best_name else 0,
         "channel_count": int(channel_count),
         "required_improvement": REQUIRED_IMPROVEMENT,
         "required_channels": REQUIRED_CHANNELS,
-        "result": "pass" if passed else "fail",
+        "per_predictor": per_predictor,
+        "result": "pass" if best_name else "fail",
     }
 
 
@@ -217,7 +239,7 @@ def leakage_checks(bundle, floors_valid, sample_dataset, sample_records):
 
     # floors never read query targets: perturbing Y changes no prediction
     x, y, t_obs, t_q = collect_split_arrays(sample_dataset, max_windows=24)
-    train_mean = np.array(floors_valid["train_mean"]["per_channel"]["mae"], dtype=np.float64)
+    train_mean = np.array(floors_valid["zero"]["per_channel"]["mae"], dtype=np.float64)
     preds = predictor_floors(x, y, t_obs, t_q, train_mean)
     perturbed_y = y + 100.0
     preds_perturbed = predictor_floors(x, perturbed_y, t_obs, t_q, train_mean)
@@ -259,10 +281,15 @@ def build_gate_payload(
 
     arrays = {}
     floors = {}
+    mean = np.array(info["normalization"]["mean"], dtype=np.float64)
+    # the protocol datasets deliver z-scored arrays; invert exactly once so all
+    # predictor math and per-channel metrics live in raw physical units and the
+    # standardized micro view divides by std exactly once
     for split in ("train", "valid", "test"):
-        arrays[split] = collect_split_arrays(
+        x, y, t_obs, t_q = collect_split_arrays(
             getattr(bundle, split), max_windows=max_windows_per_split
         )
+        arrays[split] = (x * std + mean, y * std + mean, t_obs, t_q)
     train_mean = arrays["train"][0].reshape(-1, arrays["train"][0].shape[-1]).mean(axis=0)
     for split in ("train", "valid", "test"):
         x, y, t_obs, t_q = arrays[split]

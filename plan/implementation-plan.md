@@ -2751,7 +2751,7 @@ class WindowSufficientStats:
 
 ### CH34-S01：重建 MetroPT-3 数据协议
 
-- [x] **Phase CH34-S01 完成：真实时间、连续片段、7 个连续目标和 8 个历史上下文全部由测试锁定**（2026-09-15：T01–T05 全部完成；T05 数据门禁 pass——persistence 相对 zero 改善 62.4%、7/7 通道改善、leakage 全过、finite；全量 259 passed）
+- [x] **Phase CH34-S01 完成：真实时间、连续片段、7 个连续目标和 8 个历史上下文全部由测试锁定**（2026-09-15：T01–T05 完成，核心协议经审查通过；F01/F02 补丁修正身份链与门禁统计——T05 数据门禁 pass：persistence 相对 zero（标准化零点）改善 **58.16%**、7/7 通道改善、leakage 全过、finite；初版 62.4% 因二次标准化作废；全量 266 passed）
 
 #### Task CH34-S01-T01：实现 timestamp-group split 与连续片段 catalog
 

@@ -53,7 +53,7 @@ def test_gate_requires_ten_percent_and_five_channels():
     )
     assert gate["result"] == "fail"
 
-    # 10% exactly on one channel only (4/7 improved) -> fail on channel count
+    # 10% improvement on a single channel only -> fail on channel count
     mixed = _floor_entry([0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
     gate = metropt_learnability.evaluate_learnability_gate(
         {"zero": zero, "persistence": mixed}, channel_count=7
@@ -65,8 +65,48 @@ def test_gate_requires_ten_percent_and_five_channels():
     gate = metropt_learnability.evaluate_learnability_gate(
         {"zero": zero, "persistence": borderline}, channel_count=7
     )
-    assert gate["improved_channels"] == 4
+    assert gate["per_predictor"]["persistence"]["improved_channels"] == 4
     assert gate["result"] == "fail"
+
+
+def test_gate_requires_one_single_predictor_to_satisfy_both_conditions():
+    """The channel-count and micro-improvement conditions must be met by the
+    SAME predictor: a union across predictors must not pass the gate."""
+    zero = _floor_entry([1.0] * 7)
+    predictor_a = _floor_entry([0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0])  # micro 35.7%, 3 channels
+    predictor_b = _floor_entry([1.0, 1.0, 1.0, 0.99, 0.99, 0.99, 0.99])  # 4 channels, micro 0.6%
+    gate = metropt_learnability.evaluate_learnability_gate(
+        {"zero": zero, "a": predictor_a, "b": predictor_b}, channel_count=7
+    )
+    assert gate["result"] == "fail", "union across predictors must not pass"
+    assert gate["per_predictor"]["a"]["improved_channels"] == 3
+    assert gate["per_predictor"]["b"]["improved_channels"] == 4
+
+
+def test_micro_metrics_apply_standardization_exactly_once():
+    """std_micro divides the raw-unit error by std exactly once."""
+    rng = np.random.default_rng(0)
+    y = rng.normal(size=(5, 2, 3)) * np.array([2.0, 4.0, 8.0]) + 10.0
+    predictions = y + 1.0  # every raw-unit error is exactly 1
+    std = np.array([2.0, 4.0, 8.0])
+    entry = metropt_learnability.evaluate_split_floors(predictions, y, std)
+    assert entry["per_channel_units"] == "raw_physical"
+    assert entry["per_channel"]["mae"] == pytest.approx([1.0, 1.0, 1.0])
+    assert entry["std_micro"]["mae"] == pytest.approx(float(np.mean([1 / 2, 1 / 4, 1 / 8])))
+    # no second standardization: std_micro is NOT micro-error/std/std
+    assert entry["std_micro"]["mae"] != pytest.approx(float(np.mean([1 / 4, 1 / 16, 1 / 64])))
+
+
+def test_zero_is_standardized_zero_and_absolute_zero_is_audit_only():
+    x = np.zeros((2, 3, 2))
+    y = np.full((2, 2, 2), 5.0)
+    t_obs = np.tile(np.arange(3.0), (2, 1))
+    t_q = np.tile(np.arange(3.0, 5.0), (2, 1))
+    predictions = metropt_learnability.predictor_floors(x, y, t_obs, t_q, train_mean=np.array([5.0, 5.0]))
+    # "zero" is the standardized zero: predicting each channel's train mean
+    assert np.allclose(predictions["zero"], 5.0)
+    # literal absolute zero stays available for audit and never gates
+    assert np.allclose(predictions["absolute_zero"], 0.0)
 
 
 # ---------------------------------------------------------------------------

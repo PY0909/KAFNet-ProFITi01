@@ -8,6 +8,6 @@ _CODE_DIR = Path(__file__).resolve().parent.parent
 if str(_CODE_DIR) not in sys.path:
     sys.path.insert(0, str(_CODE_DIR))
 
-# Default dataset root on AutoDL; override with KST_DATA_ROOT env var
+# Portable default: repository-relative dataset dir; override with KST_DATA_ROOT
 if "KST_DATA_ROOT" not in os.environ:
-    os.environ["KST_DATA_ROOT"] = "/root/autodl-tmp/dataset"
+    os.environ["KST_DATA_ROOT"] = str(_CODE_DIR.parent / "dataset")

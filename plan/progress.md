@@ -704,3 +704,22 @@
 - Verification run: 新测试先 red（window_catalog 中部篡改不可检、identity 缺字段、fingerprint 无透传）后 green；两文件 28 passed；全量 263 passed。
 - Review result: 规格符合性 `PASS`（对照审查 P1 第 2/3 条）。
 - Remaining risk: v2 split_sha256 已变化，F02 必须重建 data_gate.json；62.4% 门禁数字修正属 F02。
+
+## 2026-09-15 CH34-S01-F02 门禁统计口径修正 + 六条件覆盖 + conftest 可移植（审查整改）
+
+- 阶段：S4 Reconstruction / S01 审查补丁（用户审查 P1 第 1 条 + P2 三条）。
+- 问题（核实属实）：诊断在 dataset 已 z-score 的数组上再除 raw std——二次标准化，62.4% 门禁数字作废；gate 的通道数取跨 predictor OR 并集（A 补 micro、B 补通道可错误放行）；条件轴测试仅覆盖 4/6 条件（缺 low_rate、block_offline）；conftest 默认写死 `/root/autodl-tmp/dataset`。
+- 追加发现（重建门禁时暴露）：`zero` 在 raw 空间按字面 0 计算，误差被 mean/std 偏移主导（std_micro=6.35），与 §13.1.1 的 zero 参照（0.9623=E|z|）不符——修正为 `zero`=通道均值预测（标准化零点，门禁参照），literal-0 记 `absolute_zero` 仅审计、永不作为 gate 候选。
+- 修正后完整门禁（split_sha 90650166…）：**persistence 相对 zero 改善 58.16%、7/7 通道改善，leakage 全过，finite=true**——与审查估算 58.19% 及 §13.1.1（0.4052/0.9623）一致；独立复算（816 抽样窗，56.6%）互证。门禁结论不变：pass。
+- 其余修正：floors 全部在 raw 物理单位计算（z 数组仅一次反变换），`per_channel_units=raw_physical`；gate 要求同一 predictor 同时满足 micro ≥10% 与 ≥5/7 通道（per_predictor 明细入 JSON）；条件轴测试补 low_rate@30、block_offline@30（六条件 bundle 全互异、四机制 30% 实际率一致）；conftest 默认改仓库相对 dataset 并同步删除 portability allowlist 对应条目。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion, debugging
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion, debugging
+- Inputs consumed: 用户审查 P1-1/P2 清单、v2 协议数组、§13.1.1 参照值、portability allowlist。
+- Inputs not used and why: 未改写 progress 历史条目（62.4% 保留为历史，本条目更正）；未动 T01 计划（下一步单独实施）。
+- Artifacts produced: metropt_learnability 口径修正、6 条件条件轴测试、conftest 可移植、重建的 data_gate.json（58.16%）、计划 Phase S01 注记更正、本条目。
+- Verification run: 新测试先 red（per_predictor 缺失、per_channel_units 缺失、二次标准化断言）后 green（8 passed）；独立复算 56.6% 互证；全量 266 passed；portability 扫描过。
+- Review result: 规格符合性 `PASS`（对照审查 P1-1 与 P2 三条）。
+- Remaining risk: 审查预估 58.19% 与实测 58.16% 差异来自窗口全集 vs 审查抽样口径，属正常；CH34-S02-T01 按修订版（含全部审查必需项）另行实施。

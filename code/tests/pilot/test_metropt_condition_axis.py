@@ -121,6 +121,8 @@ def test_condition_history_masks_differ_and_rate_monotone(v2_protocol, tmp_path)
         ("random_000", "random", 0.00),
         ("random_030", "random", 0.30),
         ("random_070", "random", 0.70),
+        ("low_rate_030", "low_rate", 0.30),
+        ("block_offline_030", "block_offline", 0.30),
         ("mixed_030", "mixed", 0.30),
     )
     shas, observed = {}, {}
@@ -144,8 +146,9 @@ def test_condition_history_masks_differ_and_rate_monotone(v2_protocol, tmp_path)
     assert observed["random_000"] > observed["random_030"] > observed["random_070"]
     assert 0.60 < observed["random_030"] < 0.80
     assert 0.20 < observed["random_070"] < 0.45
-    # mechanism comparison at the same requested total rate: same realized rate
-    assert abs(observed["random_030"] - observed["mixed_030"]) <= 0.01
+    # all four 30% mechanisms realize the same total missing rate (within tolerance)
+    for key in ("low_rate_030", "block_offline_030", "mixed_030"):
+        assert abs(observed[key] - observed["random_030"]) <= 0.01, key
 
 
 @_requires_metropt
