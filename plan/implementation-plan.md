@@ -2760,12 +2760,12 @@ class WindowSufficientStats:
 - 修改：`code/kaf_profiti/experiments/datasets.py`
 - 创建：`code/tests/pilot/test_metropt_protocol.py`
 
-- [ ] 先写失败测试：重复 timestamp 的全部 source rows 必须进入同一 split，train/valid/test source row ID 两两不交。
-- [ ] 先写失败测试：构造一个 10 秒序列并插入 31 秒间隔，任何 history/query 跨该间隔的 origin 均不得进入 window catalog。
-- [ ] 先写失败测试：split 边界、segment ID、forecast origin、query timestamps 和 row IDs 的 SHA 在同配置下稳定复现。
-- [ ] 实现按 timestamp group 的 50/20/30 chronological split，再在每个 split 内按 `gap_multiplier=3` 划分 segment。
-- [ ] window ID 固定由 dataset、split、segment ID、forecast timestamp 和 query timestamp SHA 构成，不包含模型名或 seed。
-- [ ] 运行 `python -m pytest code/tests/pilot/test_metropt_protocol.py -q`；预期全部通过。
+- [x] 先写失败测试：重复 timestamp 的全部 source rows 必须进入同一 split，train/valid/test source row ID 两两不交。
+- [x] 先写失败测试：构造一个 10 秒序列并插入 31 秒间隔，任何 history/query 跨该间隔的 origin 均不得进入 window catalog。
+- [x] 先写失败测试：split 边界、segment ID、forecast origin、query timestamps 和 row IDs 的 SHA 在同配置下稳定复现。
+- [x] 实现按 timestamp group 的 50/20/30 chronological split，再在每个 split 内按 `gap_multiplier=3` 划分 segment。
+- [x] window ID 固定由 dataset、split、segment ID、forecast timestamp 和 query timestamp SHA 构成，不包含模型名或 seed。
+- [x] 运行 `python -m pytest code/tests/pilot/test_metropt_protocol.py -q`；预期全部通过。
 
 **验收：** 没有窗口跨 split、重复 timestamp group 或大于协议阈值的时间间断。
 

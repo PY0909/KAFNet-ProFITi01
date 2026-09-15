@@ -1,3 +1,5 @@
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -27,7 +29,27 @@ METROPT_SENSOR_COLUMNS = [
     "Oil_level",
     "Caudal_impulses",
 ]
+METROPT_CONTINUOUS_COLUMNS = [
+    "TP2",
+    "TP3",
+    "H1",
+    "DV_pressure",
+    "Reservoirs",
+    "Oil_temperature",
+    "Motor_current",
+]
+METROPT_BINARY_CONTEXT_COLUMNS = [
+    "COMP",
+    "DV_eletric",
+    "Towers",
+    "MPG",
+    "LPS",
+    "Pressure_switch",
+    "Oil_level",
+    "Caudal_impulses",
+]
 METROPT_CONTEXT_COLUMNS = ["COMP", "DV_eletric", "MPG"]
+GAP_MULTIPLIER = 3.0
 METROPT_FAULT_WINDOWS = [
     ("2020-04-18 00:00:00", "2020-04-18 23:59:00"),
     ("2020-05-29 23:30:00", "2020-05-30 06:00:00"),
@@ -204,3 +226,243 @@ class MetroPTWindowDataset(Dataset):
             rul=future_fault,
             unit_id=0,
         )
+
+
+# ---------------------------------------------------------------------------
+# CH34-S01-T01: private MetroPT v2 catalog (source rows, split, segments,
+# windows). Kept private this task; a public dataset entry is added only at
+# T04 once normalization/masks complete the protocol identity.
+# ---------------------------------------------------------------------------
+
+
+def _sha256_canonical(payload: Dict[str, object]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def load_metropt_frame_v2(data_dir) -> pd.DataFrame:
+    """Load MetroPT CSV preserving a unique stable ``source_row_id``.
+
+    The original CSV row index (``Unnamed: 0``, present in the MetroPT files)
+    becomes ``source_row_id``; rows are sorted by ``(timestamp, source_row_id)``
+    so shuffle order is never a silent input to the protocol. ``source_row_id``
+    is asserted unique (a duplicate would make window provenance ambiguous).
+    """
+    path = Path(data_dir) / CSV_NAME
+    if not path.exists():
+        raise FileNotFoundError(path)
+    frame = pd.read_csv(path, parse_dates=["timestamp"])
+    if "Unnamed: 0" in frame.columns:
+        sourceless = frame.rename(columns={"Unnamed: 0": "source_row_id"})
+    elif "source_row_id" in frame.columns:
+        sourceless = frame
+    else:
+        sourceless = frame.copy()
+        sourceless["source_row_id"] = range(len(frame))
+    if not sourceless["source_row_id"].is_unique:
+        raise ValueError("MetroPT v2 source_row_id is not unique")
+    return sourceless.sort_values(["timestamp", "source_row_id"]).reset_index(drop=True)
+
+
+def median_interval_seconds(frame: pd.DataFrame, timestamp: str = "timestamp") -> float:
+    """Median inter-sample interval (seconds) over unique sorted timestamps."""
+    import numpy as np
+
+    values = pd.to_datetime(frame[timestamp]).drop_duplicates().sort_values().astype("int64").to_numpy()
+    diffs = np.diff(values) / 1e9 if len(values) > 1 else []
+    if len(diffs) == 0 or np.all(diffs <= 0):
+        raise ValueError("cannot derive a positive median sample interval")
+    return float(np.median(diffs))
+
+
+def split_chronological_by_timestamp_group(frame, ratios=(0.5, 0.2), timestamp="timestamp", source="source_row_id"):
+    """Chronological timestamp-group split by row-count ratio.
+
+    Rows are assumed sorted by ``(timestamp, source_row_id)``. Target absolute
+    row boundaries are ``ratios`` against total rows; the legal cut is the
+    timestamp-group end nearest the target (ties choose the earlier end), with
+    both boundaries strictly increasing and all three splits non-empty. Returns
+    ``(train_ids, valid_ids, test_ids, meta)``.
+    """
+    total = int(len(frame))
+    if total < 3:
+        raise ValueError("too few rows to split into three non-empty partitions")
+    groups = frame.groupby(timestamp, sort=True)
+    cumuls = list(groups.size().cumsum())  # cumulative row index at each group end
+    ends = list(dict.fromkeys(int(c) for c in cumuls))  # legal cut positions
+
+    def nearest(target: float, allowed) -> int:
+        allowed = sorted(allowed)
+        best = min(allowed, key=lambda end: (abs(end - target), end))  # tie -> earlier (smaller end)
+        return best
+
+    target1, target2 = total * ratios[0], total * (ratios[0] + ratios[1])
+    b1 = nearest(target1, [e for e in ends if 0 < e < total])
+    b2 = nearest(target2, [e for e in ends if e > b1 < total and e < total])
+    # strictly increasing + non-empty final partition
+    if not (0 < b1 < b2 < total):
+        raise ValueError(f"split produced invalid boundaries b1={b1} b2={b2} total={total}")
+
+    ids = frame[source].astype(int).tolist()
+    train_ids = ids[:b1]
+    valid_ids = ids[b1:b2]
+    test_ids = ids[b2:]
+
+    def boundary_meta(target_rows, actual_rows):
+        return {
+            "target_rows": float(target_rows),
+            "actual_rows": int(actual_rows),
+            "boundary_time": frame[timestamp].iloc[actual_rows - 1].timestamp() if actual_rows <= len(frame) else None,
+        }
+
+    meta = {
+        "total_rows": total,
+        "target_ratios": list(ratios),
+        "boundaries": [
+            boundary_meta(target1, b1),
+            boundary_meta(target2, b2),
+        ],
+        "actual_rows": {"train": len(train_ids), "valid": len(valid_ids), "test": len(test_ids)},
+    }
+    return train_ids, valid_ids, test_ids, meta
+
+
+def segmentize(frame, threshold_seconds: float, timestamp="timestamp", reject_duplicate_timestamps=False):
+    """Split a (split-local, sorted) frame into gap-free segments.
+
+    A segment boundary is placed wherever the gap to the next row exceeds
+    ``threshold_seconds``. Returns a list of DataFrames (one per segment, in
+    chronological order); the list index is the ``segment_id``.
+    """
+    if len(frame) == 0:
+        return []
+    if reject_duplicate_timestamps and frame[timestamp].duplicated().any():
+        raise ValueError("MetroPT v2 catalog rejects duplicate timestamps (no aggregation rule)")
+    diffs = frame[timestamp].diff().dt.total_seconds()
+    boundaries = [0]
+    for index in range(1, len(frame)):
+        if diffs.iloc[index] > threshold_seconds:
+            boundaries.append(index)
+    boundaries.append(len(frame))
+    return [
+        frame.iloc[boundaries[i] : boundaries[i + 1]].reset_index(drop=True)
+        for i in range(len(boundaries) - 1)
+    ]
+
+
+@dataclass(frozen=True)
+class WindowRecord:
+    """One canonical forecast window in the MetroPT v2 catalog.
+
+    ``start`` is a row offset within ``segment_id``'s frame. ``window_id`` is a
+    content SHA over the timeline layer (segment identity + forecast/query
+    timestamps) and never over a window-bounds-containing split SHA, so no
+    "split SHA <-> window SHA" cycle exists.
+    """
+
+    segment_id: int
+    start: int
+    forecast_timestamp: float
+    query_timestamps: Tuple[float, ...]
+    query_row_ids: Tuple[int, ...]
+    window_id: str
+
+
+def build_window_catalog(
+    segments,
+    history_len: int,
+    pred_len: int,
+    stride: int,
+    dataset: str,
+    split: str,
+    timeline_sha: str,
+) -> List[WindowRecord]:
+    """Build every window fully inside each segment (never crossing a gap)."""
+    records: List[WindowRecord] = []
+    for segment_id, segment in enumerate(segments):
+        total = len(segment)
+        limit = total - history_len - pred_len + 1
+        ts = segment["timestamp"].map(pd.Timestamp.timestamp)
+        source_ids = segment["source_row_id"].astype(int).tolist()
+        for start in range(0, max(0, limit), stride):
+            forecast_ts = float(ts.iloc[start + history_len - 1])
+            query_ts = tuple(float(value) for value in ts.iloc[start + history_len : start + history_len + pred_len])
+            query_ids = tuple(int(value) for value in source_ids[start + history_len : start + history_len + pred_len])
+            window_id = _sha256_canonical(
+                {
+                    "dataset": dataset,
+                    "split": split,
+                    "segment_id": segment_id,
+                    "forecast_timestamp": forecast_ts,
+                    "query_timestamps": list(query_ts),
+                    "query_row_ids": list(query_ids),
+                    "timeline_sha256": timeline_sha,
+                }
+            )
+            records.append(WindowRecord(segment_id, start, forecast_ts, query_ts, query_ids, window_id))
+    return records
+
+
+# ---------------------------------------------------------------------------
+# Layered protocol SHAs (raw -> partition -> timeline -> window catalog).
+# Each layer depends only on strictly lower layers, so there is no cycle:
+#   raw_data_sha -> partition_sha -> timeline_sha -> window_catalog_sha
+#   (normalization_sha joins at T04 to form the final protocol_sha).
+# window_id uses the timeline layer + the window's own rows, never a
+# window-bounds-containing split SHA.
+# ---------------------------------------------------------------------------
+
+
+def raw_data_sha(frame, value_columns, timestamp="timestamp", source="source_row_id") -> str:
+    """Content SHA over the chronologically ordered raw rows.
+
+    Hashes the exact byte content (int row ids, int64-ns timestamps, float64
+    continuous values) so it depends only on the source data, never on dict
+    order or float formatting.
+    """
+    import numpy as np
+
+    digest = hashlib.sha256()
+    digest.update(np.asarray(frame[source], dtype=np.int64).tobytes())
+    digest.update(np.asarray(pd.to_datetime(frame[timestamp]).astype("int64"), dtype=np.int64).tobytes())
+    digest.update(np.asarray(frame[value_columns], dtype=np.float64).tobytes())
+    return digest.hexdigest()
+
+
+def partition_sha(raw_sha: str, train_ids, valid_ids, test_ids) -> str:
+    return _sha256_canonical(
+        {
+            "raw_data_sha256": raw_sha,
+            "train": sorted(int(v) for v in train_ids),
+            "valid": sorted(int(v) for v in valid_ids),
+            "test": sorted(int(v) for v in test_ids),
+        }
+    )
+
+
+def timeline_sha(partition_sha256: str, segments) -> str:
+    """SHA over per-segment row membership relative to the partition."""
+    seg_map = {}
+    for segment_id, segment in enumerate(segments):
+        seg_map[str(segment_id)] = sorted(int(v) for v in segment["source_row_id"])
+    return _sha256_canonical({"partition_sha256": partition_sha256, "segments": seg_map})
+
+
+def window_catalog_sha(
+    timeline_sha256: str,
+    history_len: int,
+    pred_len: int,
+    stride: int,
+    records,
+) -> str:
+    return _sha256_canonical(
+        {
+            "timeline_sha256": timeline_sha256,
+            "history_len": int(history_len),
+            "pred_len": int(pred_len),
+            "stride": int(stride),
+            "count": len(records),
+            "first_window_id": records[0].window_id if records else None,
+            "last_window_id": records[-1].window_id if records else None,
+        }
+    )

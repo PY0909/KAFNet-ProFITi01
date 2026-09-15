@@ -592,3 +592,22 @@
 - Verification run: review 文档数值与 manifest 逐项核对；`result/` 未被写入。
 - Review result: 规格符合性 `PASS`。
 - Remaining risk: FD004 未来复用须另立 RUL/风险协议与 new SHA（§13.1.2 注记）；MetroPT-3 协议重建属 CH34-S01，未在本阶段展开。
+
+## 2026-09-15 CH34-S01-T01 MetroPT-3 私有协议 catalog
+
+- 阶段：S4 Reconstruction / MetroPT-3 协议重建。
+- 范围：完成 T01 的私有 catalog 层；未注册 `metropt3_chrono_502030_v2` 公开入口，未触碰旧 MetroPT 协议与 `create_protocol_datasets`，T02/T03/T04/T05 保持未开始。
+- 设计：保留 `source_row_id` 并按 `(timestamp, source_row_id)` 稳定排序；按累计行数 50%/70% 目标在 timestamp-group 合法边界中最近切分（平局取早边界）；split 内按 `gap > 3 × train median interval` 生成 segment；segment 仅作为 mask 适配层的 `timeline_key`，窗口使用不可变 `WindowRecord`，`sample.unit_id` 语义留给后续 T02。
+- 实现：`load_metropt_frame_v2`、`median_interval_seconds`、`split_chronological_by_timestamp_group`、`segmentize`、`build_window_catalog`；新增 raw→partition→timeline→window_catalog 四层 SHA，window ID 只引用 timeline SHA + 自身 forecast/query/source-row 字段，避免循环依赖。
+- 防护测试：新增 `code/tests/pilot/test_metropt_protocol.py` 10 项——重复 timestamp 组不跨 split、边界平局取早、31 秒大间隔不进窗口、WindowRecord 单一投影、source row 唯一/稳定排序、重复 timestamp hard-fail、真实 MetroPT 1,516,948 行集成不变量和 SHA 稳定性。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: 第 13 节 CH34-S01-T01 合同、用户关于 v2 入口/SHA 分层/segment 语义/source_row_id/切分规则的修订、现有 `metropt.py`/`datasets.py`/mask window 契约、真实 MetroPT CSV。
+- Inputs not used and why: 未注册公开 v2 入口（normalization/protocol SHA 尚未在 T04 完成）；未实现 7/8 target/context、真实时间、归一化、mask 和 learnability gate（分别属于 T02–T05）；未触碰 GPU。
+- Artifacts produced: `WindowRecord` 与私有 catalog helper、`code/tests/pilot/test_metropt_protocol.py`、T01 计划勾选、本条目。
+- Verification run: 新测试先 red（`WindowRecord` import 缺失）后 green；T01 测试 `10 passed`；真实 CSV 集成不变量通过；全量 `code/tests/` `240 passed`；`git diff --check` OK。
+- Review result: 规格符合性复审 `PASS`；旧协议回归 `PASS`。
+- Remaining risk: T01 helper 尚未接入 provider，不能启动 MetroPT 训练；T02 必须在此 catalog 上补齐 7 连续 target/8 binary context；T04 才能生成 normalization/protocol SHA 并注册 v2。
