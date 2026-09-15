@@ -2824,12 +2824,12 @@ class WindowSufficientStats:
 - 创建：`code/tests/pilot/test_metropt_learnability.py`
 - 输出：`result/pilot/metropt3/diagnostics/data_gate.json`
 
-- [ ] 只在 train/validation 上计算 zero、train mean、window mean、persistence 和 linear trend；test floor 只用于最终数据审计描述，不参与协议选择。
-- [ ] 对 7 个连续通道分别输出 MAE/RMSE，再输出标准化空间全局 micro 指标；禁止跨物理单位聚合原始值误差。
-- [ ] 数据门禁要求 validation 上至少一个 history-only floor 相对 zero MAE 改善 10% 以上，且至少 5/7 个通道改善。
-- [ ] 风险标签固定为“query timestamp 与登记 fault interval 有交集”；输出每个 split 的正负 window 数和 label SHA。
-- [ ] validation 或 test 任一 split 缺少正类/负类时，第四章风险指标标记不可解释并停止风险子任务，但不阻断概率预测主任务。
-- [ ] 运行诊断两次并比较 JSON 中科学字段；预期 SHA 与指标逐值一致。
+- [x] 只在 train/validation 上计算 zero、train mean、window mean、persistence 和 linear trend；test floor 只用于最终数据审计描述，不参与协议选择。
+- [x] 对 7 个连续通道分别输出 MAE/RMSE，再输出标准化空间全局 micro 指标；禁止跨物理单位聚合原始值误差。
+- [x] 数据门禁要求 validation 上至少一个 history-only floor 相对 zero MAE 改善 10% 以上，且至少 5/7 个通道改善。
+- [x] 风险标签固定为“query timestamp 与登记 fault interval 有交集”；输出每个 split 的正负 window 数和 label SHA。
+- [x] validation 或 test 任一 split 缺少正类/负类时，第四章风险指标标记不可解释并停止风险子任务，但不阻断概率预测主任务。
+- [x] 运行诊断两次并比较 JSON 中科学字段；预期 SHA 与指标逐值一致。
 
 **验收：** 只有 `leakage_checks=pass`、`learnability_gate=pass` 和 `finite=true` 才能进入 runner 改造。
 

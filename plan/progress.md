@@ -666,3 +666,23 @@
 - Verification run: 测试先 red（artifact 缺失 + v2 未注册 + 路径嵌套/`.windows` 代理两处用例修正）后 green（4 passed）；provider 端到端实测通过；全量 `code/tests/` 254 passed；`git diff --check` OK。
 - Review result: 规格符合性 `PASS`；旧协议回归 `PASS`（旧 `metropt3_chrono_502030` 及全部既有断言不动）。
 - Remaining risk: v2 的 49-run 矩阵与 runner profile 化属 CH34-S02；learnability/风险标签门禁属 T05；当前窗口计数（train≈1.2 万窗）仅为协议产物，尚未经 learnability 门禁确认可学习。
+
+## 2026-09-15 CH34-S01-T05 MetroPT-3 数据门禁（可学习性+风险标签）
+
+- 阶段：S4 Reconstruction / MetroPT-3 协议重建收口。
+- 范围：完成 T05——新建 `code/diagnostics/metropt_learnability.py` 与 `test_metropt_learnability.py`（5 项），产出正式 `result/pilot/metropt3/diagnostics/data_gate.json`。**门禁结果：learnability_gate=pass、leakage_all_pass=true、finite=true——CH34-S01 全部验收达成，具备进入 CH34-S02（runner 改造）资格。**
+- 门禁数字（完整不截断 run）：best predictor=persistence，validation 相对 zero（标准化 micro MAE）改善 **62.4%**（要求 ≥10%），**7/7 通道改善**（要求 ≥5/7）——与 §13.1.1 的 persistence 0.4052 vs zero 0.9623 相互印证。test floor 仅记 `audit_only`，不参与协议选择。
+- 风险标签：query timestamp ∩ 登记故障区间；三 split 正负类齐全（risk_evaluable 全 true），label SHA 稳定；与 dataset `rul` 字段抽样一致性纳入 leakage 检查。
+- leakage 检查（程序化）：normalization train-only 重算比对、floors 不读 query 目标（Y 扰动预测逐值不变）、风险标签只依赖时间戳、label 与 rul 一致。
+- 确定性：诊断两次运行科学字段逐值一致（测试以 max_windows 截断验证；正式 run 不截断）。路径全部经 `resolve_runtime_paths`，输出落 result-root 相对 `pilot/metropt3/diagnostics/`。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: v2 公开协议（b6639c3d…）、§13.1.1 floor 参考、METROPT_FAULT_WINDOWS、CH34-S00-T02 的诊断脚本可移植规范。
+- Inputs not used and why: 未启动 CH34-S02（门禁刚达成，runner 改造为下一阶段）；未触 GPU；未把 test floor 用于任何选择。
+- Artifacts produced: `metropt_learnability.py`、`test_metropt_learnability.py`（5 项）、正式 `data_gate.json`、T05 勾选、本条目。
+- Verification run: 测试先 red（模块缺失）后 green（5 passed，其间修正 3 处测试用例构造与 1 处 str(None) 路径 bug、1 处 json flush 误参）；完整门禁 pass；portability 5 passed；全量 259 passed。
+- Review result: 规格符合性 `PASS`；CH34-S01 Phase 验收达成（leakage=pass + gate=pass + finite=true）。
+- Remaining risk: 门禁基于完整协议单次运行；CH34-S02 的 runner 泛化与 49-run 矩阵是下一步，正式训练前仍需本机 smoke + AutoDL 预检 + LI+TCN 5-epoch sanity（CH34-S03）。
