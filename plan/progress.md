@@ -686,3 +686,21 @@
 - Verification run: 测试先 red（模块缺失）后 green（5 passed，其间修正 3 处测试用例构造与 1 处 str(None) 路径 bug、1 处 json flush 误参）；完整门禁 pass；portability 5 passed；全量 259 passed。
 - Review result: 规格符合性 `PASS`；CH34-S01 Phase 验收达成（leakage=pass + gate=pass + finite=true）。
 - Remaining risk: 门禁基于完整协议单次运行；CH34-S02 的 runner 泛化与 49-run 矩阵是下一步，正式训练前仍需本机 smoke + AutoDL 预检 + LI+TCN 5-epoch sanity（CH34-S03）。
+
+## 2026-09-15 CH34-S01-F01 协议身份链与 seed 语义修复（审查整改）
+
+- 阶段：S4 Reconstruction / S01 审查补丁（用户审查发现 P1）。
+- 问题（审查指出，代码核实属实）：raw_data_sha 只哈希 7 连续列、未覆盖 8 个 context 值；v2 split_identity 混入运行 seed/split_seed（违反 split_seed 无关性公约）；T04 勾选声称 target/evaluator SHA 进 fingerprint 但实际缺失；window_catalog_sha 只哈希首尾+count，中部记录改动不可检。
+- 修复：raw_data_sha 纳入列名+顺序，调用点改为 7 连续+8 context 全列；window_catalog_sha 哈希全部 records（window_id/segment_id/start/query_row_ids）；split_identity 移除 seed/split_seed、记录 `split_seed_applicability=not_applicable_chronological`，显式加入 target_schema（含列序与 context policy）、target_schema_sha256、evaluator identity（GlobalMetricAccumulator v1）、fault_windows 与 label_rule；split_info 的 split_seed 改为 not_applicable；provider fingerprint 对含这些字段的协议透传（FD004 无此字段，指纹逐字节不变）。
+- 影响：v2 split_sha256 变化（协议身份更完整）——尚无任何 v2 run，无兼容代价；data_gate.json 待 F02 一并重建。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: 用户审查的 P1 清单与锚点、datasets.py:43 split_seed 无关性公约、pilot_runner fingerprint 结构。
+- Inputs not used and why: 未动 FD004 既有协议与 manifest（其 fingerprint 经无字段透传保持不变）；门禁数字重建留待 F02。
+- Artifacts produced: raw_data_sha/window_catalog_sha 强化、v2 identity 扩展、fingerprint 透传、4 项新测试（2 合成 2 门禁）、T04 注记更正、本条目。
+- Verification run: 新测试先 red（window_catalog 中部篡改不可检、identity 缺字段、fingerprint 无透传）后 green；两文件 28 passed；全量 263 passed。
+- Review result: 规格符合性 `PASS`（对照审查 P1 第 2/3 条）。
+- Remaining risk: v2 split_sha256 已变化，F02 必须重建 data_gate.json；62.4% 门禁数字修正属 F02。

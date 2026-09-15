@@ -93,7 +93,7 @@ def test_v2_public_entry_identity(v2_protocol):
     assert info["context_observation_policy"] == "fully_observed_history_last"
     assert info["masked_channels"] == "7 continuous channels"
     assert info["split_rule"] == "timestamp_group_chronological_50_20_30_segment_v2"
-    assert info["split_seed"] == 2026
+    assert info["split_seed"] == "not_applicable_chronological"
     # layered chain recorded inside the split identity
     identity = info["split_identity"]
     assert len(identity["raw_data_sha256"]) == 64
@@ -192,3 +192,39 @@ def test_query_side_is_invariant_across_conditions(v2_protocol, tmp_path):
     # window identity is carried by the base catalog and untouched by conditions
     assert masked_a.dataset.windows == base.windows
     assert masked_b.dataset.windows == base.windows
+
+
+@_requires_metropt
+def test_v2_split_identity_excludes_run_seed_and_records_full_schema(v2_protocol):
+    identity = v2_protocol.split_info["split_identity"]
+    # the run seed must never influence the split identity
+    assert "seed" not in identity and "split_seed" not in identity
+    assert identity["split_seed_applicability"] == "not_applicable_chronological"
+    # full target schema, label rule and evaluator identity are recorded
+    assert identity["target_schema"]["continuous_columns"] == list(METROPT_CONTINUOUS_COLUMNS)
+    assert identity["target_schema"]["context_columns"] == list(METROPT_BINARY_CONTEXT_COLUMNS)
+    assert identity["target_schema"]["context_observation_policy"] == "fully_observed_history_last"
+    assert identity["evaluator"]["implementation"].endswith("GlobalMetricAccumulator")
+    assert identity["fault_windows"], "registered fault intervals must be part of the identity"
+    assert "query timestamp" in identity["label_rule"]
+
+
+@_requires_metropt
+def test_provider_fingerprint_carries_v2_schema_identity(v2_protocol, tmp_path):
+    from kaf_profiti.experiments.pilot_runner import RealProtocolProvider
+
+    provider = RealProtocolProvider(
+        data_root=_DATA_ROOT,
+        result_root=tmp_path,
+        dataset=_DATASET,
+        history_len=168,
+        pred_len=24,
+        stride=60,
+        mechanism="random",
+        requested_rate=0.30,
+        mask_seed=2026,
+        split_seed=2026,
+    )
+    fingerprint = provider.protocol_fingerprint()
+    assert fingerprint["target_schema_sha256"] == v2_protocol.split_info["target_schema_sha256"]
+    assert fingerprint["evaluator"] == v2_protocol.split_info["evaluator"]

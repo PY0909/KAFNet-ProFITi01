@@ -232,6 +232,12 @@ class RealProtocolProvider:
             "normalization_sha256": self.normalization_sha256,
             "mask_sha": dict(self.mask_sha),
         }
+        # protocols whose split identity records target-schema/evaluator
+        # identity surface it here so run manifests carry the full contract
+        # (protocols without these fields keep their previous fingerprint).
+        for extra_key in ("target_schema_sha256", "evaluator"):
+            if extra_key in bundle.split_info:
+                self.fingerprint[extra_key] = bundle.split_info[extra_key]
 
     num_sensors = property(lambda self: self.bundle.num_sensors)
     context_dim = property(lambda self: self.bundle.context_dim)

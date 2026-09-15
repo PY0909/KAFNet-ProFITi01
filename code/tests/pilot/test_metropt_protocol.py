@@ -440,3 +440,34 @@ def test_v3_time_models_are_time_sensitive():
             out_b = model.predict_point(batch_b)
         assert torch.isfinite(out_a).all() and torch.isfinite(out_b).all(), name
         assert not torch.allclose(out_a, out_b, atol=1e-5), f"{name} is not time-sensitive"
+
+
+# ---------------------------------------------------------------------------
+# CH34-S01-F01: identity chain covers every scientific input; no run seed
+# ---------------------------------------------------------------------------
+
+
+def test_raw_data_sha_covers_context_values_and_column_names():
+    frame = _v2_frame(n_groups=1)
+    base = raw_data_sha(frame, _CONT_7 + _CTX_8)
+    moved_context = frame.copy(deep=True)
+    moved_context.loc[2, "K3"] = 1.0 - moved_context.loc[2, "K3"]
+    assert raw_data_sha(moved_context, _CONT_7 + _CTX_8) != base
+    # column identity (names and order) participates in the digest
+    assert raw_data_sha(frame, _CONT_7 + _CTX_8[::-1]) != base
+
+
+def test_window_catalog_sha_covers_every_record_not_just_ends():
+    from dataclasses import replace
+
+    frame = _v2_frame(n_groups=1)
+    segments = segmentize(frame, threshold_seconds=30.0)
+    records = build_window_catalog(
+        segments, 4, 2, 1, "metropt3_chrono_502030_v2", "train", "i" * 64
+    )
+    assert len(records) >= 3
+    base = window_catalog_sha("i" * 64, 4, 2, 1, records)
+    middle = len(records) // 2
+    tampered = list(records)
+    tampered[middle] = replace(tampered[middle], start=tampered[middle].start + 1)
+    assert window_catalog_sha("i" * 64, 4, 2, 1, tampered) != base

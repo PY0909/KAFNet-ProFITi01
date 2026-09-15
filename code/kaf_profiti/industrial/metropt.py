@@ -416,16 +416,21 @@ def build_window_catalog(
 def raw_data_sha(frame, value_columns, timestamp="timestamp", source="source_row_id") -> str:
     """Content SHA over the chronologically ordered raw rows.
 
-    Hashes the exact byte content (int row ids, int64-ns timestamps, float64
-    continuous values) so it depends only on the source data, never on dict
-    order or float formatting.
+    Hashes the column identity (names and order) plus the exact byte content
+    (int row ids, int64-ns timestamps, float64 values) so it depends only on
+    the source data and schema, never on dict order or float formatting.
+    Callers must pass every scientifically consumed value column (targets AND
+    context), not only the prediction targets.
     """
     import numpy as np
 
+    columns = list(value_columns)
     digest = hashlib.sha256()
+    digest.update(("|".join(columns)).encode("utf-8"))
+    digest.update(b"\x00")
     digest.update(np.asarray(frame[source], dtype=np.int64).tobytes())
     digest.update(np.asarray(pd.to_datetime(frame[timestamp]).astype("int64"), dtype=np.int64).tobytes())
-    digest.update(np.asarray(frame[value_columns], dtype=np.float64).tobytes())
+    digest.update(np.asarray(frame[columns], dtype=np.float64).tobytes())
     return digest.hexdigest()
 
 
@@ -455,6 +460,7 @@ def window_catalog_sha(
     stride: int,
     records,
 ) -> str:
+    """SHA over the COMPLETE window catalog (every record), not just ends."""
     return _sha256_canonical(
         {
             "timeline_sha256": timeline_sha256,
@@ -462,8 +468,15 @@ def window_catalog_sha(
             "pred_len": int(pred_len),
             "stride": int(stride),
             "count": len(records),
-            "first_window_id": records[0].window_id if records else None,
-            "last_window_id": records[-1].window_id if records else None,
+            "records": [
+                {
+                    "window_id": record.window_id,
+                    "segment_id": int(record.segment_id),
+                    "start": int(record.start),
+                    "query_row_ids": [int(v) for v in record.query_row_ids],
+                }
+                for record in records
+            ],
         }
     )
 

@@ -663,7 +663,9 @@ def _create_metropt_chrono_502030_v2(
     frame = load_metropt_frame_v2(data_dir)
     train_ids, valid_ids, test_ids, split_meta = split_chronological_by_timestamp_group(frame)
 
-    raw_sha = raw_data_sha(frame, METROPT_CONTINUOUS_COLUMNS)
+    # every scientifically consumed value column participates in the raw
+    # identity: the 7 prediction targets AND the 8 binary context channels
+    raw_sha = raw_data_sha(frame, METROPT_CONTINUOUS_COLUMNS + METROPT_BINARY_CONTEXT_COLUMNS)
     partition = partition_sha(raw_sha, train_ids, valid_ids, test_ids)
     train_frame = frame[frame["source_row_id"].isin(set(int(v) for v in train_ids))]
     median_interval = median_interval_seconds(train_frame)
@@ -673,6 +675,17 @@ def _create_metropt_chrono_502030_v2(
     stats = {
         "sensor_mean": torch.tensor(normalization["mean"], dtype=torch.float32),
         "sensor_std": torch.tensor(normalization["std"], dtype=torch.float32),
+    }
+    target_schema = {
+        "continuous_columns": list(METROPT_CONTINUOUS_COLUMNS),
+        "context_columns": list(METROPT_BINARY_CONTEXT_COLUMNS),
+        "context_observation_policy": "fully_observed_history_last",
+        "masked_channels": "7 continuous channels",
+    }
+    target_schema_sha256 = split_identity_sha256(target_schema)
+    evaluator_identity = {
+        "implementation": "kaf_profiti.experiments.accumulators.GlobalMetricAccumulator",
+        "version": 1,
     }
 
     id_sets = {"train": train_ids, "valid": valid_ids, "test": test_ids}
@@ -703,8 +716,9 @@ def _create_metropt_chrono_502030_v2(
         "identity_version": 1,
         "dataset": dataset_name,
         "split_rule": "timestamp_group_chronological_50_20_30_segment_v2",
-        "seed": int(seed),
-        "split_seed": 2026,
+        # the run seed must never influence the split identity; MetroPT v2
+        # splits chronologically, so no split seed applies at all
+        "split_seed_applicability": "not_applicable_chronological",
         "history_len": int(history_len),
         "pred_len": int(pred_len),
         "stride": int(stride),
@@ -720,15 +734,17 @@ def _create_metropt_chrono_502030_v2(
         "window_catalog_sha256": catalog_shas,
         "normalization_sha256": normalization["sha256"],
         "time_scale_sha256": time_scale["sha256"],
-        "context_observation_policy": "fully_observed_history_last",
-        "masked_channels": "7 continuous channels",
+        "target_schema": target_schema,
+        "target_schema_sha256": target_schema_sha256,
+        "evaluator": evaluator_identity,
+        "fault_windows": [[start, end] for start, end in METROPT_FAULT_WINDOWS],
+        "label_rule": "risk = query timestamp intersects registered fault interval",
         "window_bounds": window_bounds,
     }
     split_info = {
         "dataset": dataset_name,
         "split_rule": split_identity["split_rule"],
-        "seed": int(seed),
-        "split_seed": 2026,
+        "split_seed": "not_applicable_chronological",
         "boundaries": split_meta,
         "train_rows": len(train_ids),
         "valid_rows": len(valid_ids),
@@ -740,6 +756,9 @@ def _create_metropt_chrono_502030_v2(
         "gap_threshold_seconds": float(gap_threshold),
         "time_scale": time_scale,
         "normalization": normalization,
+        "target_schema": target_schema,
+        "target_schema_sha256": target_schema_sha256,
+        "evaluator": evaluator_identity,
         "window_bounds": window_bounds,
         "split_identity": split_identity,
         "split_sha256": split_identity_sha256(split_identity),

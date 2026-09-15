@@ -2812,7 +2812,7 @@ class WindowSufficientStats:
 - [x] 先写失败测试：6 个条件的 history mask SHA 不同，random 0/30/70 的实际可观测率严格递减。
 - [x] 先写失败测试：6 个条件的 window ID、`Y_q/M_q`、target SHA 和 valid count 完全相同。
 - [x] 在 segment timeline 上先生成 mask，再由 window catalog 切片；mask 生成器不得读取 fault label、query target 或 test metric。
-- [x] 将 split、segment、normalization、mask、target schema 和 evaluator SHA 写入 provider fingerprint。
+- [x] 将 split、segment、normalization、mask、target schema 和 evaluator SHA 写入 provider fingerprint。（2026-09-15 F01 更正：身份经分层 SHA 链进入 split_sha256——raw 覆盖 7 连续+8 context 列、window catalog 全量 records、target schema/evaluator/fault windows 显式入 identity；provider fingerprint 记录 split_sha256+normalization+mask_sha，并透传 v2 的 target_schema_sha256/evaluator；运行 seed 已从 split identity 移除）
 - [x] 运行 `python -m pytest code/tests/pilot/test_metropt_condition_axis.py -q`；预期全部通过。
 
 **验收：** 实验轴确实改变 history 输入，同时不改变被评价的未来目标集合。
