@@ -90,6 +90,8 @@ def create_protocol_datasets(
         return _create_metropt_chrono_602020(data_root, seed, history_len, pred_len, stride)
     if dataset == "metropt3_chrono_502030":
         return _create_metropt_chrono_502030(data_root, seed, history_len, pred_len, stride)
+    if dataset == "metropt3_chrono_502030_v2":
+        return _create_metropt_chrono_502030_v2(data_root, seed, history_len, pred_len, stride)
     if dataset.startswith("cmapss_fd"):
         subset = dataset.replace("cmapss_", "").upper()
         return _create_cmapss(data_root, subset, seed, split_seed, history_len, pred_len, stride)
@@ -596,4 +598,163 @@ def _create_tep(
         split_info=split_info,
         num_sensors=len(TEP_SENSOR_COLUMNS),
         context_dim=len(TEP_CONTEXT_COLUMNS),
+    )
+
+
+# ---------------------------------------------------------------------------
+# MetroPT-3 v2 protocol (CH34-S01-T04): train-only normalization + public entry
+# ---------------------------------------------------------------------------
+
+_METROPT_V2_STD_FLOOR = 1e-6
+
+
+def metropt_v2_stats_artifact(frame, train_source_row_ids, continuous_columns):
+    """Frozen train-only normalization artifact over the continuous channels.
+
+    Only rows whose ``source_row_id`` is in ``train_source_row_ids`` enter the
+    mean/std, so valid/test values can never move the artifact. The binary
+    history context is deliberately absent: by protocol policy it stays raw 0/1
+    and is never z-scored.
+    """
+    train_frame = frame[frame["source_row_id"].isin(set(int(v) for v in train_source_row_ids))]
+    values = torch.tensor(train_frame[list(continuous_columns)].to_numpy(), dtype=torch.float32)
+    if values.numel() and not torch.isfinite(values).all():
+        raise ValueError("non-finite continuous values in MetroPT v2 normalization source rows")
+    payload = {
+        "source_split": "train",
+        "columns": list(continuous_columns),
+        "count": int(len(train_frame)),
+        "std_floor": _METROPT_V2_STD_FLOOR,
+        "mean": [float(value) for value in values.mean(dim=0)],
+        "std": [float(value) for value in values.std(dim=0).clamp_min(_METROPT_V2_STD_FLOOR)],
+    }
+    artifact = dict(payload)
+    artifact["sha256"] = split_identity_sha256(payload)
+    return artifact
+
+
+def _create_metropt_chrono_502030_v2(
+    data_root: Path,
+    seed: int,
+    history_len: int,
+    pred_len: int,
+    stride: int,
+):
+    from kaf_profiti.industrial.metropt import (
+        GAP_MULTIPLIER,
+        METROPT_BINARY_CONTEXT_COLUMNS,
+        METROPT_CONTINUOUS_COLUMNS,
+        METROPT_FAULT_WINDOWS,
+        MetroPTChronoDataset,
+        build_window_catalog,
+        load_metropt_frame_v2,
+        median_interval_seconds,
+        metropt_time_scale_artifact,
+        partition_sha,
+        raw_data_sha,
+        segmentize,
+        split_chronological_by_timestamp_group,
+        timeline_sha,
+        window_catalog_sha,
+    )
+
+    dataset_name = "metropt3_chrono_502030_v2"
+    data_dir = data_root / "metropt+3+dataset"
+    frame = load_metropt_frame_v2(data_dir)
+    train_ids, valid_ids, test_ids, split_meta = split_chronological_by_timestamp_group(frame)
+
+    raw_sha = raw_data_sha(frame, METROPT_CONTINUOUS_COLUMNS)
+    partition = partition_sha(raw_sha, train_ids, valid_ids, test_ids)
+    train_frame = frame[frame["source_row_id"].isin(set(int(v) for v in train_ids))]
+    median_interval = median_interval_seconds(train_frame)
+    gap_threshold = GAP_MULTIPLIER * median_interval
+    time_scale = metropt_time_scale_artifact(train_frame)
+    normalization = metropt_v2_stats_artifact(frame, train_ids, METROPT_CONTINUOUS_COLUMNS)
+    stats = {
+        "sensor_mean": torch.tensor(normalization["mean"], dtype=torch.float32),
+        "sensor_std": torch.tensor(normalization["std"], dtype=torch.float32),
+    }
+
+    id_sets = {"train": train_ids, "valid": valid_ids, "test": test_ids}
+    datasets, timeline_shas, catalog_shas, window_bounds = {}, {}, {}, {}
+    for split in ("train", "valid", "test"):
+        rows = frame[frame["source_row_id"].isin(set(int(v) for v in id_sets[split]))]
+        segments = segmentize(rows, threshold_seconds=gap_threshold, reject_duplicate_timestamps=True)
+        split_timeline_sha = timeline_sha(partition, segments)
+        records = build_window_catalog(
+            segments, history_len, pred_len, stride, dataset_name, split, split_timeline_sha
+        )
+        datasets[split] = MetroPTChronoDataset(
+            segments,
+            records,
+            history_len,
+            pred_len,
+            METROPT_CONTINUOUS_COLUMNS,
+            METROPT_BINARY_CONTEXT_COLUMNS,
+            fault_windows=METROPT_FAULT_WINDOWS,
+            median_interval=median_interval,
+            stats=stats,
+        )
+        timeline_shas[split] = split_timeline_sha
+        catalog_shas[split] = window_catalog_sha(split_timeline_sha, history_len, pred_len, stride, records)
+        window_bounds[split] = _window_bounds_entry(datasets[split].windows)
+
+    split_identity = {
+        "identity_version": 1,
+        "dataset": dataset_name,
+        "split_rule": "timestamp_group_chronological_50_20_30_segment_v2",
+        "seed": int(seed),
+        "split_seed": 2026,
+        "history_len": int(history_len),
+        "pred_len": int(pred_len),
+        "stride": int(stride),
+        "row_ratios": [0.5, 0.2, 0.3],
+        "train_rows": len(train_ids),
+        "valid_rows": len(valid_ids),
+        "test_rows": len(test_ids),
+        "train_median_interval_seconds": float(median_interval),
+        "gap_threshold_seconds": float(gap_threshold),
+        "raw_data_sha256": raw_sha,
+        "partition_sha256": partition,
+        "timeline_sha256": timeline_shas,
+        "window_catalog_sha256": catalog_shas,
+        "normalization_sha256": normalization["sha256"],
+        "time_scale_sha256": time_scale["sha256"],
+        "context_observation_policy": "fully_observed_history_last",
+        "masked_channels": "7 continuous channels",
+        "window_bounds": window_bounds,
+    }
+    split_info = {
+        "dataset": dataset_name,
+        "split_rule": split_identity["split_rule"],
+        "seed": int(seed),
+        "split_seed": 2026,
+        "boundaries": split_meta,
+        "train_rows": len(train_ids),
+        "valid_rows": len(valid_ids),
+        "test_rows": len(test_ids),
+        "train_windows": len(datasets["train"]),
+        "valid_windows": len(datasets["valid"]),
+        "test_windows": len(datasets["test"]),
+        "train_median_interval_seconds": float(median_interval),
+        "gap_threshold_seconds": float(gap_threshold),
+        "time_scale": time_scale,
+        "normalization": normalization,
+        "window_bounds": window_bounds,
+        "split_identity": split_identity,
+        "split_sha256": split_identity_sha256(split_identity),
+        "num_sensors": len(METROPT_CONTINUOUS_COLUMNS),
+        "context_dim": len(METROPT_BINARY_CONTEXT_COLUMNS),
+        "context_observation_policy": "fully_observed_history_last",
+        "masked_channels": "7 continuous channels",
+        "label_rule": "risk = query timestamp intersects registered fault interval",
+    }
+    return ProtocolDatasets(
+        name=dataset_name,
+        train=datasets["train"],
+        valid=datasets["valid"],
+        test=datasets["test"],
+        split_info=split_info,
+        num_sensors=len(METROPT_CONTINUOUS_COLUMNS),
+        context_dim=len(METROPT_BINARY_CONTEXT_COLUMNS),
     )

@@ -647,3 +647,22 @@
 - Verification run: 新测试先 red（median 断言与合成偏移不自洽）修正后 green；T03 全文件 20 passed；真实 MetroPT 冒烟 T_obs diffs=[1.0,0.9,1.0,...] 非等距、T_q[0]>T_obs[-1]、全量 250 passed。
 - Review result: 规格符合性 `PASS`；旧协议回归 `PASS`。
 - Remaining risk: 时间尺度 sha 尚未进入 provider fingerprint（T04 落地）；T04 须以 `reject_duplicate_timestamps=True` 构建正式 v2 入口并注册 `metropt3_chrono_502030_v2`。
+
+## 2026-09-15 CH34-S01-T04 MetroPT-3 归一化冻结、条件轴与 v2 公开入口
+
+- 阶段：S4 Reconstruction / MetroPT-3 协议重建。
+- 范围：完成 T04——train-only 归一化（7 连续通道）、timeline-first 条件轴（segment 即 timeline unit）、完整分层协议身份，并注册公开入口 `metropt3_chrono_502030_v2`。T05（可学习性/风险门禁）未开始。
+- 实现：`metropt_v2_stats_artifact`（只由 train source_row_id 行计算 mean/std，二值 context 不进归一化）；`MetroPTChronoDataset` 新增 `stats`（仅作用 X_obs/Y_q）；`_create_metropt_chrono_502030_v2` 串联 raw→partition→timeline→window_catalog + normalization/time_scale → `split_sha256`（protocol 层），`segmentize` 强制 `reject_duplicate_timestamps=True`；`create_protocol_datasets` 注册 v2 分派。
+- provider 集成实测：`RealProtocolProvider` 直接消费 v2——mask 三 split bundle 生成、loader batch `[32,168,7]`、li_tcn loss 有限；`num_sensors=7/context_dim=8`。
+- 防护测试（`test_metropt_condition_axis.py` 4 项）：归一化 SHA 对 valid/test 行扰动不变、对 train 行扰动必变；4 条件 bundle SHA 互异且 random 0/30/70 可观测率 1.0>~0.7>~0.3 严格递减、mixed 与 random 在同 30% 实际率一致；条件间 query 侧逐字节不变（Y_q/M_q/context/window 投影/valid count）且 X_obs==base×M_obs、两机制 30% 的 history mask 必不相同；公开入口身份字段（7/8 维、分层 SHA、context policy、masked channels、window bounds）。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: T01 catalog/T02 dataset/T03 时间、`TimelineMaskedWindowDataset` 的 segment 契约、`RealProtocolProvider` 指纹链、§13.2 冻结合同、用户关于占位 SHA/分层 SHA/公开入口时机的修订。
+- Inputs not used and why: 未修改 `pilot_runner.py`（provider 指纹结构对 v2 已够用，layered SHA 经 split_identity 进 split_sha256）；未修改 `masks.py`（segment-as-unit 直接满足契约）；未触 GPU；未开始 T05。
+- Artifacts produced: `metropt_v2_stats_artifact`、`_create_metropt_chrono_502030_v2` + 分派、`MetroPTChronoDataset.stats`、`test_metropt_condition_axis.py`（4 项）、T04 勾选、本条目。
+- Verification run: 测试先 red（artifact 缺失 + v2 未注册 + 路径嵌套/`.windows` 代理两处用例修正）后 green（4 passed）；provider 端到端实测通过；全量 `code/tests/` 254 passed；`git diff --check` OK。
+- Review result: 规格符合性 `PASS`；旧协议回归 `PASS`（旧 `metropt3_chrono_502030` 及全部既有断言不动）。
+- Remaining risk: v2 的 49-run 矩阵与 runner profile 化属 CH34-S02；learnability/风险标签门禁属 T05；当前窗口计数（train≈1.2 万窗）仅为协议产物，尚未经 learnability 门禁确认可学习。

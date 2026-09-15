@@ -2808,12 +2808,12 @@ class WindowSufficientStats:
 - 修改：`code/kaf_profiti/experiments/masks.py`
 - 创建：`code/tests/pilot/test_metropt_condition_axis.py`
 
-- [ ] 先写失败测试：改变 valid/test 数值不能改变 normalization SHA；改变 train 数值必须改变 SHA。
-- [ ] 先写失败测试：6 个条件的 history mask SHA 不同，random 0/30/70 的实际可观测率严格递减。
-- [ ] 先写失败测试：6 个条件的 window ID、`Y_q/M_q`、target SHA 和 valid count 完全相同。
-- [ ] 在 segment timeline 上先生成 mask，再由 window catalog 切片；mask 生成器不得读取 fault label、query target 或 test metric。
-- [ ] 将 split、segment、normalization、mask、target schema 和 evaluator SHA 写入 provider fingerprint。
-- [ ] 运行 `python -m pytest code/tests/pilot/test_metropt_condition_axis.py -q`；预期全部通过。
+- [x] 先写失败测试：改变 valid/test 数值不能改变 normalization SHA；改变 train 数值必须改变 SHA。
+- [x] 先写失败测试：6 个条件的 history mask SHA 不同，random 0/30/70 的实际可观测率严格递减。
+- [x] 先写失败测试：6 个条件的 window ID、`Y_q/M_q`、target SHA 和 valid count 完全相同。
+- [x] 在 segment timeline 上先生成 mask，再由 window catalog 切片；mask 生成器不得读取 fault label、query target 或 test metric。
+- [x] 将 split、segment、normalization、mask、target schema 和 evaluator SHA 写入 provider fingerprint。
+- [x] 运行 `python -m pytest code/tests/pilot/test_metropt_condition_axis.py -q`；预期全部通过。
 
 **验收：** 实验轴确实改变 history 输入，同时不改变被评价的未来目标集合。
 

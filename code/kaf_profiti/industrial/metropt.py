@@ -491,6 +491,7 @@ class MetroPTChronoDataset(Dataset):
         context_columns,
         fault_windows=None,
         median_interval: float = None,
+        stats: Dict[str, Tensor] = None,
     ):
         self._units = {int(index): segment.reset_index(drop=True) for index, segment in enumerate(segments)}
         self._records = list(records)
@@ -502,6 +503,7 @@ class MetroPTChronoDataset(Dataset):
         self.context_cols = list(context_columns)
         self.fault_windows = fault_windows
         self.median_interval = median_interval
+        self.stats = stats
         self._validate_columns()
         self._validate_context_binary()
 
@@ -552,6 +554,11 @@ class MetroPTChronoDataset(Dataset):
         ]
         X_obs = torch.tensor(hist[self.continuous].to_numpy(), dtype=torch.float32)
         Y_q = torch.tensor(fut[self.continuous].to_numpy(), dtype=torch.float32)
+        if self.stats is not None:
+            # train-only normalization over the 7 continuous channels only;
+            # the binary context stays raw 0/1 by protocol policy.
+            X_obs = (X_obs - self.stats["sensor_mean"]) / self.stats["sensor_std"]
+            Y_q = (Y_q - self.stats["sensor_mean"]) / self.stats["sensor_std"]
         M_obs = torch.ones_like(X_obs)
         M_q = torch.ones_like(Y_q)
         context = torch.tensor(
