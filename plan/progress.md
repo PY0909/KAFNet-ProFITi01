@@ -574,3 +574,21 @@
 - Verification run: 全量 `code/tests/` 218 passed（含修订后双向防护测试）。核验中发现并处置一处陈旧 artifact：15:20 生成的三个 v3 mixed bundle 携带中间代码状态下的 split SHA（4c62…，与确定性重算的 61c7… 不符），占据确定性路径导致 mixed@0.30 provider 构建被严格校验硬拒——确认 split SHA 两次重算完全一致（排除非确定性）后删除，重建 bundle 携带正确 SHA 且 realized≈0.29 达标。
 - Review result: 规格符合性复审 `PASS`；质量复审 `APPROVED`。
 - Remaining risk: 同上一条——AutoDL 侧 runs 删除 + 重跑预检 + 重跑 42 run；valid 恶化现象在修复后首轮重看。
+
+## 2026-09-15 CH34-S00-T01 冻结 FD004 路线并登记诊断证据
+
+- 阶段：S4 Reconstruction / 第 13 节（MetroPT-3 重启前冻结）。
+- 内容：**CH2.5-P04~P07 已冻结，由第 13 节替代。** FD004 已完成的 2 个连续传感器预测 run 一并登记为 `diagnostic_only`，不进入任何第三/四章 formal 结论或模型排序。
+- 判定：代码链路有效（连续性 32/32、engine 隔离、窗口对齐、train-only 归一化、timeline mask 可复现均通过），但 FD004 裸传感器回归任务不适配（21 通道 cycle 级 lag-1 自相关≈0，学习模型未稳定超过零/常数预测；持久性 test MAE≈1.02 因未来工况切换而劣化）。文档：`plan/review/fd004-task-suitability-review.md`。
+- 保留物证：`result/pilot/fd004/runs/` 下点预测 random@0% 与 random@30% 两个 run（manifest/metrics/history/checkpoint 原样，未手工修改）。
+
+### Capability-use audit
+
+- Required skills: executing-plans, verification, verification-before-completion
+- Skills actually used: executing-plans, verification, verification-before-completion
+- Inputs consumed: 两个 FD004 run 的 manifest/metrics/checkpoint（只读）、§13.1.1 诊断事实、诊断脚本与既有 ch3 可移植策略测试。
+- Inputs not used and why: 未改写任何 `result/` artifact；未重建 MetroPT-3 协议（CH34-S01）。
+- Artifacts produced: `plan/review/fd004-task-suitability-review.md`、本进度条目、计划 CH34-S00-T01 勾选。
+- Verification run: review 文档数值与 manifest 逐项核对；`result/` 未被写入。
+- Review result: 规格符合性 `PASS`。
+- Remaining risk: FD004 未来复用须另立 RUL/风险协议与 new SHA（§13.1.2 注记）；MetroPT-3 协议重建属 CH34-S01，未在本阶段展开。

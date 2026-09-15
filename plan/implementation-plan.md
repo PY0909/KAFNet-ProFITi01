@@ -2437,6 +2437,8 @@ class WindowSufficientStats:
 
 ### CH2.5-P04：第三章 42 个点预测单种子 pilot
 
+> **2026-09-15 冻结：** 本 Phase 及其后的 CH2.5-P05～P07 不再按 FD004 连续传感器预测任务执行。已完成的 P00～P03 工程门禁继续有效；新的数据集选择、第三章和第四章单种子实验顺序以第 13 节为唯一执行入口。冻结不等于完成，以下 checkbox 保持未勾选，禁止据此继续提交 FD004 完整训练。
+
 - [ ] **Phase CH2.5-P04 完成：30 个基线 run 与 12 个本文 run 全部 pilot validated**
 
 #### Task CH2.5-P04-T01：执行 30 个点预测基线 run
@@ -2647,3 +2649,482 @@ class WindowSufficientStats:
 - **未修改范围：** 模型、数据集、训练入口、配置、测试、`result/` 和论文正文均未在本轮改动。
 - **执行位置：** P00-P02 与 P03-T01 至 T04 在本机完成；P03-T05 完成 AutoDL 环境预检；P04-P05 的完整训练在 AutoDL 完成；P04-T03、P05-T03、P06-P07 在本机读取已验签 artifact 完成。
 - **后续起点：** 从 `CH2.5-P00-T01` 开始，按 Phase 顺序逐项执行并即时勾选。
+
+---
+
+## 13. FD004 问题复盘与第三、四章单种子实验重启 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: 使用 `subagent-driven-development`（独立 Task）或 `executing-plans`（当前会话顺序执行）逐项实施。所有步骤使用 checkbox；每通过一项验证立即将对应 `- [ ]` 改为 `- [x]`，不得在 Phase 结束后集中补勾。
+
+**Goal：** 停止在不适配的 FD004 连续传感器预测任务上继续消耗算力，先修正 MetroPT-3 的时间、窗口、预测通道和上下文协议，再按“本机门禁 -> AutoDL 对比模型 -> 本文模型”的顺序完成第三章与第四章单种子诊断实验。
+
+**Architecture：** FD004 当前结果只保留为数据集适配性反例，不进入第三、四章模型排序；MetroPT-3 作为第三、四章单种子主数据集。所有模型消费同一份 chronological split、train-only normalization、真实时间戳、连续片段窗口、timeline-first history mask、历史上下文和 evaluator artifact；CLI 只负责选择矩阵与运行范围，科学配置全部来自 tracked YAML。
+
+**Tech Stack：** Python、PyTorch、pandas、NumPy、PyYAML、pytest；本机负责数据审计、测试、dry-run 和受限 smoke，AutoDL 负责不截断的完整训练与统一硬件计时。
+
+### 13.1 诊断结论与数据集决策
+
+#### 13.1.1 已核实事实
+
+| 证据 | 结果 | 解释 |
+|---|---:|---|
+| FD004 连续性、窗口边界、engine 隔离、归一化回放、mask SHA | 32/32 checks passed | 当前两次 run 不是由跨 engine、窗口错位、归一化泄漏或条件 mask 复用造成 |
+| FD004 LI+TCN `random@0%` test | MAE 0.8282 / RMSE 0.9920 | 与标准化空间零预测器几乎相同 |
+| FD004 LI+TCN `random@30%` test | MAE 0.8304 / RMSE 0.9929 | best validation MAE 出现在 epoch 1，随后明显过拟合 |
+| FD004 test 零预测器 | MAE 0.8305 / RMSE 0.9927 | 当前学习模型没有超过全局均值预测 |
+| FD004 test persistence | MAE 1.0231 / RMSE 1.4016 | 未来传感器受未提供的未来工况切换强烈影响 |
+| FD001 当前 21 通道协议 | 6 个 train sensor std `<=1e-5` | 直接复用全部 21 通道会放大准常量通道，不能作为无修改替代品 |
+| MetroPT-3 原始数据 | 1,516,948 行；中位采样间隔 10 秒；331 个间隔大于 30 秒 | 数据规模和任务匹配，但窗口必须按连续片段构造 |
+| MetroPT-3 当前实现 | `T_obs/T_q=torch.arange(...)` | 真实时间抖动和停机间隔未进入模型，不能直接开始论文实验 |
+| MetroPT-3 当前预测目标 | 7 个连续量 + 8 个二值控制/状态量 | 二值控制量不应与连续状态量混为同一回归目标 |
+| MetroPT-3 4 分钟 horizon，连续 7 通道 | valid persistence MAE 0.4052，zero MAE 0.9623 | 目标在修正后具备明显可学习性 |
+| MetroPT-3 4 分钟 horizon，连续 7 通道 | test persistence MAE 0.4714，zero MAE 0.7592 | 仅作数据适配性诊断，不用于选模型或调参 |
+
+#### 13.1.2 数据集角色冻结
+
+| 数据集 | 本轮角色 | 是否跑第三/四章完整单种子 | 约束 |
+|---|---|---|---|
+| MetroPT-3 | 第三、四章主数据集 | 是 | 完成 CH34-S01～S03 数据协议门禁后才能训练 |
+| FD004 | 数据适配性反例；未来可改做 RUL/风险任务 | 否 | 当前两个 run 保留原始 artifact，不继续补齐 49-run 矩阵 |
+| FD001 | 可选的数据加载/接口 smoke | 否 | 未冻结传感器筛选前不得生成模型优劣结论 |
+| TEP | 后续外部验证候选 | 否 | 本轮单种子主链路闭合前不展开 |
+
+**决策理由：** “文件最小”只能降低运行成本，不能保证研究任务可辨识。FD004 原生用途是多工况退化/RUL 建模；若未来工况未知，把它改造成未来传感器回归会把不可观测控制切换混入误差。MetroPT-3 是连续工业设备时间序列，且简单 history-only predictor 明显优于零预测，更符合论文的异步多传感器状态预测主题。
+
+### 13.2 本轮固定科学合同
+
+1. 单种子固定为 `seed=2026`，`split_seed=2026`，`mask_seed=2026`；只生成 `run_level=pilot`，不得写成 formal 结论。
+2. MetroPT-3 按唯一 timestamp group 做 chronological 50/20/30 划分；任何 source row、timestamp group 或 forecast window 不得跨 split。
+3. 名义采样间隔由 train split 中位数计算；连续片段阈值固定为 `3 * train_median_interval`。窗口内出现更大间隔即丢弃该 origin，阈值的解析值与 SHA 写入协议 artifact。
+4. 预测通道固定为 7 个连续状态量：`TP2`、`TP3`、`H1`、`DV_pressure`、`Reservoirs`、`Oil_temperature`、`Motor_current`。
+5. 历史上下文固定为 8 个二值状态量在 forecast origin 前最后一个观测值：`COMP`、`DV_eletric`、`Towers`、`MPG`、`LPS`、`Pressure_switch`、`Oil_level`、`Caudal_impulses`。不得读取 query 段状态量。
+6. 窗口固定为 `history_len=168`、`pred_len=24`、`stride=60`；按 10 秒名义间隔解释为约 28 分钟历史、4 分钟预测、10 分钟采样一个 origin。
+7. `T_obs/T_q` 由真实 timestamp 换算，并以 train median interval 缩放；规则采样时相邻差约为 1，时间抖动保留，停机大间隔由片段门禁排除。
+8. 连续通道均值/标准差只由 train split 中可用行计算；二值 context 保持 0/1。冻结后 valid/test 只应用，不重新估计。
+9. 人工缺失只改变 history 的 `X_obs/M_obs`；`Y_q/M_q`、query timestamp、forecast origin 和 target window ID 跨条件完全不变。
+10. 缺失强度为 random `0.00/0.30/0.70`；机制为实际缺失率 0.30 下的 random、low-rate、block-offline、mixed；代码 ID 固定使用 `random`、`low_rate`、`block_offline`、`mixed`，random 0.30 只训练一次，共 6 个唯一条件。
+11. 第三章点预测指标为标准化空间全局 MAE/RMSE、valid count、逐传感器 MAE/RMSE、参数量、训练时间和推理时间；原始物理单位逐传感器指标作为辅助，不跨单位求和。
+12. 第四章概率指标为 MAE、RMSE、NLL、CRPS、95% PICP、MPIW、valid count、参数量、训练时间和推理时间；PICP 必须与 MPIW 联合解释。
+13. checkpoint 只由 validation 指标选择：第三章使用 validation MAE，第四章使用 validation CRPS；冻结 checkpoint 后 test 只完整评估一次。
+14. 所有路径由 CLI、`KST_DATA_ROOT`、`KST_RESULT_ROOT`、`KST_CACHE_ROOT` 或项目相对路径解析。tracked Python/YAML/Markdown 和 manifest 禁止出现机器绝对路径、账号、主机、IP、端口或固定远程链接。
+15. 先跑对比模型再跑本文模型；任一 baseline gate 未关闭时，runner 必须拒绝同范围的 `kst_light` 或 `kst_probflow`。
+
+---
+
+### CH34-S00：冻结 FD004 路线并固化诊断证据
+
+- [x] **Phase CH34-S00 完成：FD004 停止条件、证据边界和可移植诊断均已登记**（2026-09-15：T01 登记 2 个 diagnostic_only run 与适配性结论；T02 消除两脚本固定路径并新建可移植性门禁；连续性诊断 32/32，全量 pilot 测试 155 passed）
+
+#### Task CH34-S00-T01：登记 FD004 两个 run 的适配性结论
+
+**Files：**
+- 创建：`plan/review/fd004-task-suitability-review.md`
+- 修改：`plan/progress.md`
+- 只读：`result/pilot/fd004/runs/`
+
+- [x] 从两个 manifest 读取 scientific key、condition、seed、protocol SHA、checkpoint SHA 和 metrics，不手工修改任何 artifact。
+- [x] 将 `random@0%`、`random@30%` 与 zero/window-mean/persistence floor 放入同一张诊断表。
+- [x] 明确区分“代码链路有效”和“数据任务不适配”；不得把性能差归因于已经通过的窗口或 mask 检查。
+- [x] 将这两个 run 标记为 `diagnostic_only` 的文档结论，不改写 manifest 中既有字段。
+- [x] 在 `plan/progress.md` 记录“CH2.5-P04～P07 已冻结，由第 13 节替代”。
+
+**验收：** 后续 runner 不会把 FD004 两个 run 计入 MetroPT-3 coverage，论文表格构建器也不会读取它们。
+
+#### Task CH34-S00-T02：消除诊断脚本中的固定路径
+
+**Files：**
+- 修改：`code/diagnostics/fd004_continuity_diag.py`
+- 修改：`code/diagnostics/fd004_learnability_sanity.py`
+- 修改：`code/tests/pilot/test_fd004_window_continuity.py`
+- 测试：`code/tests/pilot/test_pilot_portability.py`
+
+- [x] 先写失败测试：扫描两个脚本并断言不存在用户目录、固定 data root 或固定 result root。
+- [x] 运行 `python -m pytest code/tests/pilot/test_pilot_portability.py -q`；预期在修复前因固定路径失败。
+- [x] 为脚本增加 `--data-root`、`--result-root`/`--runs-root` 参数，并复用 `resolve_runtime_paths`；默认值只能来自环境变量或项目相对目录。
+- [x] 将诊断输出路径放入解析后的 result root，manifest 引用保持 result-root 相对路径。
+- [x] 重跑连续性诊断；预期 `32/32 checks passed`。
+- [x] 重跑 portability 测试与 `git diff --check`；预期全部通过。
+
+**验收：** 在本机或 AutoDL 改变项目根后，两个诊断脚本无需改源码即可运行。
+
+---
+
+### CH34-S01：重建 MetroPT-3 数据协议
+
+- [ ] **Phase CH34-S01 完成：真实时间、连续片段、7 个连续目标和 8 个历史上下文全部由测试锁定**
+
+#### Task CH34-S01-T01：实现 timestamp-group split 与连续片段 catalog
+
+**Files：**
+- 修改：`code/kaf_profiti/industrial/metropt.py`
+- 修改：`code/kaf_profiti/experiments/datasets.py`
+- 创建：`code/tests/pilot/test_metropt_protocol.py`
+
+- [ ] 先写失败测试：重复 timestamp 的全部 source rows 必须进入同一 split，train/valid/test source row ID 两两不交。
+- [ ] 先写失败测试：构造一个 10 秒序列并插入 31 秒间隔，任何 history/query 跨该间隔的 origin 均不得进入 window catalog。
+- [ ] 先写失败测试：split 边界、segment ID、forecast origin、query timestamps 和 row IDs 的 SHA 在同配置下稳定复现。
+- [ ] 实现按 timestamp group 的 50/20/30 chronological split，再在每个 split 内按 `gap_multiplier=3` 划分 segment。
+- [ ] window ID 固定由 dataset、split、segment ID、forecast timestamp 和 query timestamp SHA 构成，不包含模型名或 seed。
+- [ ] 运行 `python -m pytest code/tests/pilot/test_metropt_protocol.py -q`；预期全部通过。
+
+**验收：** 没有窗口跨 split、重复 timestamp group 或大于协议阈值的时间间断。
+
+#### Task CH34-S01-T02：分离连续预测通道与历史运行上下文
+
+**Files：**
+- 修改：`code/kaf_profiti/industrial/metropt.py`
+- 修改：`code/kaf_profiti/industrial/batch.py`
+- 修改：`code/kaf_profiti/experiments/datasets.py`
+- 测试：`code/tests/pilot/test_metropt_protocol.py`
+
+- [ ] 先写失败测试：`X_obs/Y_q/M_obs/M_q` 最后一维严格为 7，`context` 最后一维严格为 8。
+- [ ] 先写失败测试：逐个断言 7 个连续通道和 8 个 context 通道的固定顺序；列缺失、重复或顺序漂移均 hard fail。
+- [ ] 先写失败测试：任意修改 query 段 8 个状态量不得改变模型输入 `X_obs/M_obs/T_obs/context`。
+- [ ] 将 MetroPT sensor schema 改为 7 个连续目标；context 使用 history 最后 timestamp 的 8 个二值状态值。
+- [ ] 二值 context 只允许 0/1 且不做 z-score；发现其他值时报告列名、source row ID 并失败。
+- [ ] 运行目标/上下文隔离测试；预期所有 target perturbation 和 future-context perturbation 检查通过。
+
+**验收：** 模型只预测连续状态量，且所有模型拥有完全相同的 history-only 运行上下文。
+
+#### Task CH34-S01-T03：接入真实时间与数值稳定缩放
+
+**Files：**
+- 修改：`code/kaf_profiti/industrial/metropt.py`
+- 修改：`code/kaf_profiti/industrial/batch.py`
+- 测试：`code/tests/pilot/test_metropt_protocol.py`
+
+- [ ] 先写失败测试：输入 `[0s,10s,21s,31s]` 后，`T` 的相邻差必须保留 `[1.0,1.1,1.0]`，不能退化为等距 `arange`。
+- [ ] 先写失败测试：`T_q[0] > T_obs[-1]`，且两者来自同一 timestamp scale artifact。
+- [ ] 将 timestamp 相对当前 segment 起点转换为秒，再除以 train median interval；保存原始单位、缩放值和 SHA。
+- [ ] GRU-D 的 `delta_t`、ODE-RNN 的积分间隔和 KST 时间编码全部消费同一 `T_obs`，不得各自重建规则索引。
+- [ ] 运行时间敏感性测试：改变合法时间间隔但不改值时，三个时间模型的输出必须发生有限变化。
+
+**验收：** 论文中的“异步/不规则时间”对应真实 timestamp 与共享 mask，不再仅由等距索引伪造。
+
+#### Task CH34-S01-T04：冻结 train-only normalization 与 timeline-first masks
+
+**Files：**
+- 修改：`code/kaf_profiti/experiments/datasets.py`
+- 修改：`code/kaf_profiti/experiments/masks.py`
+- 创建：`code/tests/pilot/test_metropt_condition_axis.py`
+
+- [ ] 先写失败测试：改变 valid/test 数值不能改变 normalization SHA；改变 train 数值必须改变 SHA。
+- [ ] 先写失败测试：6 个条件的 history mask SHA 不同，random 0/30/70 的实际可观测率严格递减。
+- [ ] 先写失败测试：6 个条件的 window ID、`Y_q/M_q`、target SHA 和 valid count 完全相同。
+- [ ] 在 segment timeline 上先生成 mask，再由 window catalog 切片；mask 生成器不得读取 fault label、query target 或 test metric。
+- [ ] 将 split、segment、normalization、mask、target schema 和 evaluator SHA 写入 provider fingerprint。
+- [ ] 运行 `python -m pytest code/tests/pilot/test_metropt_condition_axis.py -q`；预期全部通过。
+
+**验收：** 实验轴确实改变 history 输入，同时不改变被评价的未来目标集合。
+
+#### Task CH34-S01-T05：建立数据可学习性与风险标签门禁
+
+**Files：**
+- 创建：`code/diagnostics/metropt_learnability.py`
+- 创建：`code/tests/pilot/test_metropt_learnability.py`
+- 输出：`result/pilot/metropt3/diagnostics/data_gate.json`
+
+- [ ] 只在 train/validation 上计算 zero、train mean、window mean、persistence 和 linear trend；test floor 只用于最终数据审计描述，不参与协议选择。
+- [ ] 对 7 个连续通道分别输出 MAE/RMSE，再输出标准化空间全局 micro 指标；禁止跨物理单位聚合原始值误差。
+- [ ] 数据门禁要求 validation 上至少一个 history-only floor 相对 zero MAE 改善 10% 以上，且至少 5/7 个通道改善。
+- [ ] 风险标签固定为“query timestamp 与登记 fault interval 有交集”；输出每个 split 的正负 window 数和 label SHA。
+- [ ] validation 或 test 任一 split 缺少正类/负类时，第四章风险指标标记不可解释并停止风险子任务，但不阻断概率预测主任务。
+- [ ] 运行诊断两次并比较 JSON 中科学字段；预期 SHA 与指标逐值一致。
+
+**验收：** 只有 `leakage_checks=pass`、`learnability_gate=pass` 和 `finite=true` 才能进入 runner 改造。
+
+---
+
+### CH34-S02：泛化 runner、矩阵与统一评价器
+
+- [ ] **Phase CH34-S02 完成：MetroPT-3 的 49 个单种子 key 可选择、可恢复、可验签**
+
+#### Task CH34-S02-T01：移除 runner 的 FD004 专用假设
+
+**Files：**
+- 修改：`code/run_pilot_matrix.py`
+- 修改：`code/kaf_profiti/experiments/pilot_runner.py`
+- 修改：`code/tests/pilot/test_pilot_runner.py`
+
+- [ ] 先写失败测试：`--profile metropt3` 必须从 `configs/pilot/metropt3/` 加载矩阵，并把结果写入 `pilot/metropt3/`。
+- [ ] 先写失败测试：`--family baseline|ours`、可重复 `--condition-id` 和可重复 `--model-id` 只能筛选调度范围，不能改变 scientific key 或 matrix SHA。
+- [ ] 先写失败测试：调度 ours 时，baseline-first gate 只接受同 dataset、track、condition 和 seed 的已验签 baseline manifests。
+- [ ] 将 `_PILOT_ROOT`、config dir、报告路径和 CLI 文案改为 dataset profile 驱动，不在源码中拼接 FD004。
+- [ ] resume 必须同时匹配 matrix、data、split、segment、normalization、mask、target、evaluator、code 和 checkpoint artifact SHA。
+- [ ] 运行 runner 测试；预期原 FD004 expansion 回归测试与新 MetroPT profile 测试同时通过。
+
+**验收：** 可以先运行中心条件，再运行剩余条件，同时完整复用同一 tracked matrix 身份。
+
+#### Task CH34-S02-T02：创建第三章点预测单种子矩阵
+
+**Files：**
+- 创建：`configs/pilot/metropt3/common.yaml`
+- 创建：`configs/pilot/metropt3/point_matrix.yaml`
+- 测试：`code/tests/pilot/test_metropt_matrices.py`
+
+- [ ] 登记 5 个 baseline：`li_tcn`、`ff_gru`、`masked_tcn`、`gru_d`、`ode_rnn`，统一使用 MLP point head。
+- [ ] 登记本文模型 `kst_light` 的 Linear 与 MLP 两个轻量头；两者除 head 外共享 encoder、数据和训练预算。
+- [ ] 登记 6 个唯一条件：random 0/30/70、low-rate 30、block-offline 30、mixed 30；condition ID 固定为 `point_random_000`、`point_random_030`、`point_random_070`、`point_low_rate_030`、`point_block_offline_030`、`point_mixed_030`，random 30 同时属于 intensity/mechanism 两个视图。
+- [ ] 固定 `seed=2026`、168/24/60、50 epochs、batch 128；不登记 model-specific test override。
+- [ ] dry-run 断言 point key 精确为 `5*6 + 2*6 = 42`，baseline 排在 ours 前。
+
+**验收：** 42 个 key 的区别只来自模型、head 或预注册 history 缺失条件。
+
+#### Task CH34-S02-T03：创建第四章概率预测单种子矩阵
+
+**Files：**
+- 创建：`configs/pilot/metropt3/probabilistic_matrix.yaml`
+- 测试：`code/tests/pilot/test_metropt_matrices.py`
+
+- [ ] 登记 6 个 baseline：TCN-Gaussian、PatchTST-Gaussian、GRU-D-Gaussian、ODE-RNN-Gaussian、GraFITi-Gaussian、ProFITi。
+- [ ] 登记本文模型 `kst_probflow`，固定中心条件 `mixed@actual 0.30`。
+- [ ] 每个 adapted baseline 在 registry/manifest 保留实现身份，不得把本仓库简化实现表述为原论文官方实现。
+- [ ] 固定 `seed=2026`、168/24/60、50 epochs、batch 128、95% interval、`nsamples=100`。
+- [ ] dry-run 断言 probabilistic key 精确为 `6+1=7`，六个 baseline 全部排在 KST ProbFlow 前。
+
+**验收：** 第四章概率比较只有 7 个唯一 source run，不复制第三章点预测结果冒充概率结果。
+
+#### Task CH34-S02-T04：补齐统一指标与 artifact schema
+
+**Files：**
+- 修改：`code/kaf_profiti/experiments/evaluator.py`
+- 修改：`code/kaf_profiti/experiments/pilot_runner.py`
+- 创建：`code/tests/pilot/test_metropt_evaluator.py`
+
+- [ ] 先写失败测试：MAE/RMSE 由全局 error sum/count 计算，结果不随 batch size 改变。
+- [ ] 先写失败测试：NLL/CRPS/PICP/MPIW 使用同一 distribution sample/interval，invalid target 不进入分母。
+- [ ] 保存标准化全局指标、逐通道标准化指标和逐通道物理单位指标；物理单位指标不得合成一个总分。
+- [ ] 保存完整 prediction、target、mask、window ID、checkpoint、history、timing raw repeats 和相对路径 manifest。
+- [ ] manifest 必须含 `run_id`/scientific key、seed、dataset、model、condition、实际缺失率、全部公平性 SHA 和 `test_evaluation_count=1`。
+- [ ] 运行 evaluator 测试与 artifact round-trip；预期 batch-size invariance 和内容 SHA 全部通过。
+
+**验收：** 第三、四章的每个报告数字都可从 prediction artifact 独立重算。
+
+#### Task CH34-S02-T05：执行本机全模型 smoke
+
+**Files：**
+- 修改：`code/tests/pilot/test_point_baseline_fidelity.py`
+- 修改：`code/tests/pilot/test_probabilistic_baseline_fidelity.py`
+- 输出：`result/pilot/metropt3/smoke/`
+
+- [ ] 先运行全部单元测试：`python -m pytest code/tests/ -q`；预期零失败。
+- [ ] 对 5 个点 baseline 运行一个 train batch、一个 validation batch和一个 feature-only test batch；预期 `ready=5, failed=0, test_metrics=0`。
+- [ ] 对 6 个概率 baseline 运行 forward/NLL/backward/sample/checkpoint round-trip；预期 `ready=6, failed=0, test_metrics=0`。
+- [ ] baseline smoke 全部通过后，再运行 KST-Light 两个 head 和 KST ProbFlow；预期 `ready=3, failed=0, test_metrics=0`。
+- [ ] 比较 14 个 smoke entry 的 split/segment/normalization/center-mask/target/evaluator SHA；预期完全一致。
+- [ ] 运行 portability scan 与 `git diff --check`；预期零固定路径、主机、账号、端口或 URL 命中。
+
+**验收：** 本机只证明代码和接口可运行，smoke 指标不得进入任何模型排序。
+
+---
+
+### CH34-S03：AutoDL 环境预检与中心条件学习门禁
+
+- [ ] **Phase CH34-S03 完成：同一 clean commit 在 AutoDL 通过数据、设备和 validation-only 学习门禁**
+
+#### Task CH34-S03-T01：冻结版本并核对跨机身份
+
+- [ ] 本机测试、data gate、dry-run 和 smoke 全部通过后形成 clean commit；记录 Git SHA 与依赖摘要。
+- [ ] AutoDL 只拉取该 commit，不直接编辑 checkout；数据根、结果根和缓存根只通过环境变量设置。
+- [ ] 比较 MetroPT 原始文件、matrix、split、segment、normalization、mask、target、evaluator 和 code SHA。
+- [ ] 记录 GPU、CUDA、PyTorch、可用显存与磁盘；路径值只写环境报告，不写 tracked 配置。
+- [ ] 使用一个 baseline 的单 batch CUDA smoke 验证设备链路，禁止计算 test metric。
+
+**验收：** scientific identity 完全一致且 AutoDL checkout clean，才能开始短训练。
+
+#### Task CH34-S03-T02：执行 LI+TCN validation-only 短训练
+
+- [ ] 只在 `mixed@0.30` 上运行 LI+TCN 的 5-epoch train/validation sanity，不访问 test target。
+- [ ] 保存 `run_level=sanity_train`，与完整 pilot key/目录隔离，不能被 resume 当作完整结果。
+- [ ] 检查 loss 有限、参数发生更新、validation MAE 至少一次优于初始化模型，并与 data gate 的 history-only floor 比较。
+- [ ] 若 learned model 完全不优于 best naive floor，则停止后续 GPU 调度，进入数据/优化诊断；不得为了过门禁读取 test。
+- [ ] 若通过，登记固定优化器和训练预算；本轮不进行 learning-rate sweep 或模型特异调参。
+
+**验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。
+
+---
+
+### CH3-S04：第三章中心条件单种子对比
+
+- [ ] **Phase CH3-S04 完成：5 个 baseline 先完成，随后 KST-Light 两个 head 完成**
+
+#### Task CH3-S04-T01：运行 5 个点预测 baseline 的中心条件
+
+- [ ] dry-run 筛选 `track=point,family=baseline,condition_id=point_mixed_030`；预期 `expected=5,new=5`。
+- [ ] 在同一 AutoDL 环境依次运行 LI+TCN、FF+GRU、Masked TCN、GRU-D、ODE-RNN；单模型失败不停止其余模型。
+- [ ] 每个模型完整使用 train/validation，按最低 validation MAE 保存 best checkpoint，冻结后完整 test 一次。
+- [ ] validator 检查 `completed=5, nonfinite=0, fairness_mismatch=0, test_count_error=0`。
+- [ ] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。
+
+**验收：** 5 个 baseline artifact 全部验签后，baseline-first gate 才允许本文模型运行。
+
+#### Task CH3-S04-T02：运行 KST-Light Linear/MLP 中心条件
+
+- [ ] dry-run 筛选 `track=point,family=ours,condition_id=point_mixed_030`；预期 `expected=2,new=2`。
+- [ ] gate 核对同条件 5/5 baseline manifest、checkpoint 和公平性 SHA。
+- [ ] 运行 KST-Light Linear 与 KST-Light MLP；除 head 外不得更改 encoder、数据、epoch、batch 或优化预算。
+- [ ] checkpoint 只由 validation MAE 选择，test 各完整评估一次。
+- [ ] validator 检查 `completed=2, nonfinite=0, fairness_mismatch=0, test_count_error=0`。
+
+**验收：** 中心条件 7/7 齐全后才能扩展缺失强度与机制。
+
+#### Task CH3-S04-T03：生成中心条件 go/no-go 报告
+
+- [ ] 本机同步 7 个完整 artifact 并校验 manifest/artifact SHA，不手工修改源文件。
+- [ ] 输出 validation/test MAE、RMSE、逐传感器误差、参数量、训练/推理时间及相对 best naive 的改善率。
+- [ ] 检查是否存在全模型接近零预测、epoch 1 后持续恶化、单通道支配总误差或 timing 不可比。
+- [ ] 只给出 `go/fix/stop` 诊断，不报告 mean±std、置信区间、显著性或“证明优于”。
+- [ ] 只有 `go` 才进入 CH3-S05；`fix` 必须通过 validation-only 重跑，旧 run 保留但不得混入新矩阵。
+
+**验收：** 中心条件证明 MetroPT 协议可学习且全模型比较口径一致。
+
+---
+
+### CH3-S05：第三章缺失强度与机制单种子扩展
+
+- [ ] **Phase CH3-S05 完成：第三章 42/42 个唯一 point run 闭合**
+
+#### Task CH3-S05-T01：运行 baseline 的其余 5 个条件
+
+- [ ] dry-run 排除已完成的 mixed 30%，预期 `5 baseline * 5 remaining conditions = 25` 个新 run。
+- [ ] 先完成 random 0/30/70 强度轴，再完成 low-rate 30、block-offline 30；mixed 30 复用 CH3-S04 结果。
+- [ ] 每完成一个模型的首个新条件即检查 history mask SHA、实际缺失率、target SHA 和 validation 曲线，再继续该模型其余条件。
+- [ ] 单个 key 失败只记录失败并继续；修复后只 resume 失败 key，禁止覆盖已验签 run。
+- [ ] validator 检查 baseline 累计 `30/30`，且 `condition_axis_effective=true`。
+
+**验收：** baseline 30/30 全部完成后才允许调度本文模型剩余条件。
+
+#### Task CH3-S05-T02：运行 KST-Light 的其余 5 个条件
+
+- [ ] gate 核对 30/30 baseline 完整且共享协议；预期 `2 heads * 5 remaining conditions = 10` 个新 run。
+- [ ] 依次运行 Linear 和 MLP，各自覆盖 random 0/30/70、low-rate 30、block-offline 30；mixed 30 复用 CH3-S04。
+- [ ] 所有条件保持同 encoder、训练预算、checkpoint selector 和 evaluator。
+- [ ] validator 检查 ours 累计 `12/12`、point 总计 `42/42`、duplicate/orphan/missing 均为 0。
+- [ ] 核对 random 30 在 intensity/mechanism 两个视图指向同一 scientific key 和 run artifact。
+
+**验收：** 42 个点预测单种子 run 全部可追溯，才能生成第三章 pilot 汇总。
+
+#### Task CH3-S05-T03：生成第三章单种子汇总
+
+**Files：**
+- 修改：`code/build_pilot_outputs.py`
+- 创建：`code/tests/pilot/test_metropt_point_outputs.py`
+- 输出：`result/pilot/metropt3/summary/point_intensity.csv`
+- 输出：`result/pilot/metropt3/summary/point_mechanism.csv`
+- 输出：`result/pilot/metropt3/summary/point_efficiency.csv`
+
+- [ ] 强度表只含 random 0/30/70；机制表只含实际 30% 的四机制。
+- [ ] 输出原始单种子指标、相对 0% 退化率、逐通道指标和 provenance；不生成标准差或显著性。
+- [ ] 效率表只读取同一 AutoDL GPU、FP32、相同 batch 与固定 warm-up/repeats 的 profile。
+- [ ] 输出测试断言 42 个 source keys 全部被消费，random 30 不重复训练，所有数字可从 prediction 重算。
+- [ ] 将结论限制为“是否值得进入多 seed formal”及“下一步应修复哪里”。
+
+**验收：** 第三章单种子阶段闭合，但仍不能替代研究生论文最终多 seed 证据。
+
+---
+
+### CH4-S06：第四章概率预测与风险单种子实验
+
+- [ ] **Phase CH4-S06 完成：6 个概率 baseline 先完成，随后 KST ProbFlow 与 validation-only 风险校准完成**
+
+#### Task CH4-S06-T01：运行 6 个概率 baseline
+
+- [ ] dry-run 筛选 `track=probabilistic,family=baseline,condition_id=prob_mixed_030`；预期 `expected=6,new=6`。
+- [ ] 在与第三章相同的 MetroPT split、center mask、target、seed 和 AutoDL 硬件上运行六个 baseline。
+- [ ] checkpoint 只由 validation CRPS 选择；NLL、sample、CRPS 和 interval 必须来自同一训练分布。
+- [ ] 每个模型保存 `nsamples=100` 的可复算预测 artifact、95% interval、timing raw repeats 和参数量。
+- [ ] validator 检查 `completed=6, nonfinite=0, fairness_mismatch=0, test_count_error=0`。
+
+**验收：** 6/6 baseline 完成前，runner 拒绝 KST ProbFlow。
+
+#### Task CH4-S06-T02：运行 KST ProbFlow
+
+- [ ] gate 核对六个 baseline manifest、checkpoint 和所有公平性 SHA。
+- [ ] 使用完全相同的 mixed actual 30% condition、seed、窗口、context、训练预算和 evaluator。
+- [ ] 不根据 baseline test 排名修改 KST 超参数；本轮只运行 tracked 默认配置。
+- [ ] checkpoint 只由 validation CRPS 选择，冻结后 test 完整评估一次。
+- [ ] validator 检查 NLL/sample/CRPS/interval 同源，且 `completed=1, nonfinite=0, test_count_error=0`。
+
+**验收：** 概率预测 7/7 source run 齐全且无额外数据或 test 访问优势。
+
+#### Task CH4-S06-T03：执行 validation-only 风险校准诊断
+
+**Files：**
+- 修改：`code/evaluate_risk_calibration.py`
+- 创建：`code/tests/pilot/test_metropt_risk_calibration.py`
+- 输出：`result/pilot/metropt3/summary/risk_calibration.json`
+
+- [ ] 风险标签只由 query timestamp 与登记 fault interval 的交集生成；label artifact 与概率 run 使用同一 window ID。
+- [ ] Platt calibration 只拟合 validation logits/labels；阈值只由 validation 确定，禁止搜索 test label。
+- [ ] test 只复用冻结 run 保存的 logits/predictions，不重新选择 checkpoint 或再次遍历带 target loader。
+- [ ] 输出 AUROC、AUPRC、Brier、ECE，以及 validation 阈值下的 precision/recall/F1；任一 split 单类时对应排序指标为 `null`。
+- [ ] 单种子风险结果只作模块可用性诊断，不与没有同构 risk head 的概率 baseline 做不公平排名。
+
+**验收：** calibration provenance 明确显示 fit split 为 validation，test 从未参与参数或阈值选择。
+
+#### Task CH4-S06-T04：生成第四章单种子汇总
+
+**Files：**
+- 修改：`code/build_pilot_outputs.py`
+- 创建：`code/tests/pilot/test_metropt_probabilistic_outputs.py`
+- 输出：`result/pilot/metropt3/summary/probabilistic_main.csv`
+
+- [ ] 输出 7 行 MAE、RMSE、NLL、CRPS、PICP、MPIW、valid count、训练时间、推理时间和参数量。
+- [ ] PICP 与 MPIW 联合展示；PICP 接近 0.95 但 MPIW 极宽不能表述为最佳。
+- [ ] 每行包含 scientific key、checkpoint SHA、matrix SHA、protocol SHA、distribution identity 和 evaluator SHA。
+- [ ] 从 prediction artifact 重算全部 7 行指标；预期 `rows=7, untraced=0, nonfinite=0`。
+- [ ] 单种子不生成 mean±std、置信区间、显著性标记或最终论文排名措辞。
+
+**验收：** 第四章概率主表和风险诊断均可复算，且二者的评价边界没有混淆。
+
+---
+
+### CH34-S07：单种子总复核与后续决策
+
+- [ ] **Phase CH34-S07 完成：49 个 MetroPT-3 source run 通过完整性复核，并形成多 seed 前的 keep/fix/drop 决策**
+
+#### Task CH34-S07-T01：执行全局 coverage、泄漏与可移植性复核
+
+- [ ] 检查 point 42 行、probabilistic 7 行、总计 49 个唯一 source run；duplicate/orphan/missing 为 0。
+- [ ] 检查 49 个 run 均来自同一 clean commit 和同一 AutoDL 硬件；本机 smoke/sanity 不进入 coverage。
+- [ ] 检查 direct comparison 内 split、segment、normalization、condition mask、target、context 和 evaluator SHA 一致。
+- [ ] 抽取一个 point run 和一个 probabilistic run，从 prediction artifact 重算全部指标。
+- [ ] 扫描新增 Python/YAML/Markdown/manifest；预期无机器绝对路径、账号、主机、IP、端口或固定 URL。
+- [ ] 运行 `python -m pytest code/tests/ -q` 与 `git diff --check`；预期零失败。
+
+**验收：** 任一 coverage、泄漏、公平性、可复算或可移植性错误都会使对应 Phase 保持未勾选。
+
+#### Task CH34-S07-T02：形成 validation-driven keep/fix/drop 决策
+
+- [ ] `keep`：接口、fidelity、学习性、稳定性和公平性通过，可进入后续多 seed formal。
+- [ ] `fix`：存在明确的数据、优化或概率校准问题；修复只依据 train/validation 证据，使用新 scientific key 重跑。
+- [ ] `drop`：实现 fidelity 不足或数值不可用；不得仅因 test 结果差而删除合格 baseline。
+- [ ] 分别判断表示编码、Linear/MLP head、概率 head、风险校准和效率瓶颈，不用一个综合分数掩盖问题。
+- [ ] 将决策写入 `plan/progress.md`，但不自动启动调参、消融、多 seed 或其他数据集实验。
+
+**验收：** 下一步由验证集和工程证据驱动，不由单次 test 排名反向塑造算法。
+
+### 13.3 单种子运行总量与顺序
+
+| 顺序 | 运行范围 | 完整训练数 | 执行位置 |
+|---:|---|---:|---|
+| 1 | LI+TCN `mixed@0.30` validation-only sanity | 1 个非报告短训练 | AutoDL |
+| 2 | 第三章 5 baseline `mixed@0.30` | 5 | AutoDL |
+| 3 | KST-Light Linear/MLP `mixed@0.30` | 2 | AutoDL |
+| 4 | 第三章 5 baseline 其余 5 条件 | 25 | AutoDL |
+| 5 | KST-Light 两个 head 其余 5 条件 | 10 | AutoDL |
+| 6 | 第四章 6 概率 baseline `mixed@0.30` | 6 | AutoDL |
+| 7 | KST ProbFlow `mixed@0.30` | 1 | AutoDL |
+| 合计 | 第三章 42 + 第四章 7 | 49 个唯一完整 pilot run | AutoDL |
+
+### 13.4 本轮明确不做
+
+- 不继续补跑 FD004 的 47 个剩余 run。
+- 不把 FD001 直接替换成论文主数据集。
+- 不做多 seed、显著性检验、完整消融、广泛鲁棒性、模型特异超参数搜索或算法创新。
+- 不使用 test 选择窗口、通道、context、学习率、checkpoint、缺失机制或风险阈值。
+- 不把本机 smoke、AutoDL sanity 或任一单种子结果写成第三、四章最终结论。
+
+### 13.5 后续正式实验边界
+
+第 13 节只负责“数据协议正确、代码跑通、单种子可学习、比较链路公平”。只有 CH34-S07 全部通过后，才另行规划 seeds `2026/2027/2028` 的 formal 重复、bootstrap/置信区间、外部数据集、消融与鲁棒性。正式计划必须复用本节冻结的科学协议，任何协议变更都要生成新版本和新 SHA，不能与本轮 49 个 pilot run 混合。
