@@ -2793,11 +2793,11 @@ class WindowSufficientStats:
 - 修改：`code/kaf_profiti/industrial/batch.py`
 - 测试：`code/tests/pilot/test_metropt_protocol.py`
 
-- [ ] 先写失败测试：输入 `[0s,10s,21s,31s]` 后，`T` 的相邻差必须保留 `[1.0,1.1,1.0]`，不能退化为等距 `arange`。
-- [ ] 先写失败测试：`T_q[0] > T_obs[-1]`，且两者来自同一 timestamp scale artifact。
-- [ ] 将 timestamp 相对当前 segment 起点转换为秒，再除以 train median interval；保存原始单位、缩放值和 SHA。
-- [ ] GRU-D 的 `delta_t`、ODE-RNN 的积分间隔和 KST 时间编码全部消费同一 `T_obs`，不得各自重建规则索引。
-- [ ] 运行时间敏感性测试：改变合法时间间隔但不改值时，三个时间模型的输出必须发生有限变化。
+- [x] 先写失败测试：输入 `[0s,10s,21s,31s]` 后，`T` 的相邻差必须保留 `[1.0,1.1,1.0]`，不能退化为等距 `arange`。
+- [x] 先写失败测试：`T_q[0] > T_obs[-1]`，且两者来自同一 timestamp scale artifact。
+- [x] 将 timestamp 相对当前 segment 起点转换为秒，再除以 train median interval；保存原始单位、缩放值和 SHA。
+- [x] GRU-D 的 `delta_t`、ODE-RNN 的积分间隔和 KST 时间编码全部消费同一 `T_obs`，不得各自重建规则索引。
+- [x] 运行时间敏感性测试：改变合法时间间隔但不改值时，三个时间模型的输出必须发生有限变化。
 
 **验收：** 论文中的“异步/不规则时间”对应真实 timestamp 与共享 mask，不再仅由等距索引伪造。
 

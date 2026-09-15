@@ -554,12 +554,10 @@ class MetroPTChronoDataset(Dataset):
         Y_q = torch.tensor(fut[self.continuous].to_numpy(), dtype=torch.float32)
         M_obs = torch.ones_like(X_obs)
         M_q = torch.ones_like(Y_q)
-        origin = hist.iloc[-1]
         context = torch.tensor(
             hist[self.context_cols].iloc[-1].to_numpy(dtype="float32")
         )
-        T_obs = torch.arange(self.history_len, dtype=torch.float32)
-        T_q = torch.arange(self.history_len, self.history_len + self.pred_len, dtype=torch.float32)
+        T_obs, T_q = self._real_time(segment, record)
         return MetroPTWindowSample(
             X_obs=X_obs,
             T_obs=T_obs,
@@ -571,3 +569,42 @@ class MetroPTChronoDataset(Dataset):
             rul=self._risk(fut),
             unit_id=0,
         )
+
+    def _real_time(self, segment, record):
+        """Real timestamps relative to the segment start, scaled by the train
+        median interval: keeps jitter (e.g. diffs ``[1.0, 1.1, 1.0]``) instead
+        of collapsing to an equidistant ``arange``."""
+        if self.median_interval is None or self.median_interval <= 0:
+            raise ValueError("MetroPT v2 real time requires a positive train median_interval")
+        hist_ts = segment["timestamp"].iloc[
+            record.start : record.start + self.history_len
+        ]
+        fut_ts = segment["timestamp"].iloc[
+            record.start + self.history_len : record.start + self.history_len + self.pred_len
+        ]
+        origin = hist_ts.iloc[0]
+        scale = self.median_interval
+        T_obs = ((hist_ts - origin).dt.total_seconds() / scale).to_numpy(dtype="float32")
+        T_q = ((fut_ts - origin).dt.total_seconds() / scale).to_numpy(dtype="float32")
+        return (
+            torch.tensor(T_obs, dtype=torch.float32),
+            torch.tensor(T_q, dtype=torch.float32),
+        )
+
+
+def metropt_time_scale_artifact(train_frame, timestamp="timestamp") -> Dict[str, object]:
+    """Nominal time scale artifact derived only from the train split.
+
+    Records the raw unit (seconds), the train median sample interval, and a
+    content SHA. ``T_obs``/``T_q`` are divided by this interval so a nominal
+    10-second cadence maps to diffs around 1.0 while true jitter is preserved.
+    """
+    median = median_interval_seconds(train_frame, timestamp)
+    payload = {
+        "unit": "seconds",
+        "source": "train",
+        "median_interval_seconds": float(median),
+    }
+    artifact = dict(payload)
+    artifact["sha256"] = _sha256_canonical(payload)
+    return artifact

@@ -629,3 +629,21 @@
 - Verification run: T02 测试先 red（`MetroPTChronoDataset` 缺失 + object-dtype 修复 + torch import/测试用例修正）后 green；全量 `code/tests/` 246 passed；真实 MetroPT 冒烟 `X_obs(168,7)/Y_q(24,7)/context(8)`、unit_id=0。
 - Review result: 规格符合性 `PASS`；旧协议回归 `PASS`。
 - Remaining risk: 真实时间仍为 arange（T03 替换）；归一化/mask 未接入（T04）；真实故障风险标签 `rul` 已按 fault-window 交集计算，但正式风险口径在 T05 复核。
+
+## 2026-09-15 CH34-S01-T03 MetroPT-3 真实时间与数值稳定缩放
+
+- 阶段：S4 Reconstruction / MetroPT-3 协议重建。
+- 范围：完成 T03，`MetroPTChronoDataset.__getitem__` 弃用 `arange`，改为段起点秒数 ÷ train median interval 的真实缩放时间；提供 `metropt_time_scale_artifact`（unit/source/median/sha）。尚未接入 provider/归一化/mask（T04）与 learnability/风险门禁（T05）。
+- 实现：`_real_time` 以 `segment` 时间戳相对段起点换算秒、除以 `median_interval`，保留真实抖动（真实数据 diffs 出现 0.9/1.0，非等距）；`metropt_time_scale_artifact` 只从 train frame 派生并记录 sha256。
+- 防护测试：4 项 T03 用例——合成 [0,10,21,31]s 段以 median=10 缩放后 diffs==[1.0,1.1,1.0]、`T_q[0]>T_obs[-1]` 且 origin→query 间距 (44−31)/10=1.3、artifact 记录原始单位+稳定 sha、GRU-D/ODE-RNN/KST 在合法时间间隔变化（值不变）下输出有限变化。全量 `test_metropt_protocol.py` 20 passed。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: T01 catalog 的窗口时间戳、T02 dataset、`compute_delta_t`(GRU-D)/ODE-RNN Euler 间隔/KST `encoder(x,T_obs,m,ctx)` 的时间消费点、§13.2 时间缩放合同。
+- Inputs not used and why: 未把时间尺度 artifact 写入 provider fingerprint（T04）；未实现归一化/mask（T04）；未触 GPU。时间敏感性测试按 GRU-D 全观测 mask 下 delta_t 恒 0 的机制特性使用稀疏 mask 构造，以真实暴露时间依赖。
+- Artifacts produced: `_real_time`、`metropt_time_scale_artifact`、4 项 T03 测试、T03 计划勾选、本条目。
+- Verification run: 新测试先 red（median 断言与合成偏移不自洽）修正后 green；T03 全文件 20 passed；真实 MetroPT 冒烟 T_obs diffs=[1.0,0.9,1.0,...] 非等距、T_q[0]>T_obs[-1]、全量 250 passed。
+- Review result: 规格符合性 `PASS`；旧协议回归 `PASS`。
+- Remaining risk: 时间尺度 sha 尚未进入 provider fingerprint（T04 落地）；T04 须以 `reject_duplicate_timestamps=True` 构建正式 v2 入口并注册 `metropt3_chrono_502030_v2`。

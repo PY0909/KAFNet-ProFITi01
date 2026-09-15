@@ -4,6 +4,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -14,6 +15,7 @@ from kaf_profiti.industrial.metropt import (
     build_window_catalog,
     load_metropt_frame_v2,
     median_interval_seconds,
+    metropt_time_scale_artifact,
     partition_sha,
     raw_data_sha,
     segmentize,
@@ -256,7 +258,7 @@ def _v2_frame(n_groups=3, rows_per_group=8, gap_after=None, cont=_CONT_7, ctx=_C
     return pd.DataFrame(rows)
 
 
-def _v2_ds(frame, H=4, P=2, stride=1, cont=_CONT_7, ctx=_CTX_8, **kwargs):
+def _v2_ds(frame, H=4, P=2, stride=1, cont=_CONT_7, ctx=_CTX_8, median=10.0, **kwargs):
     from kaf_profiti.industrial.metropt import MetroPTChronoDataset
     from kaf_profiti.industrial.metropt import build_window_catalog
     from kaf_profiti.industrial.metropt import segmentize
@@ -266,7 +268,7 @@ def _v2_ds(frame, H=4, P=2, stride=1, cont=_CONT_7, ctx=_CTX_8, **kwargs):
         segments, H, P, stride, "metropt3_chrono_502030_v2", "train", "g" * 64
     )
     return MetroPTChronoDataset(
-        segments, records, H, P, cont, ctx, **kwargs
+        segments, records, H, P, cont, ctx, median_interval=median, **kwargs
     )
 
 
@@ -310,7 +312,7 @@ def test_v2_query_context_perturbation_does_not_change_model_inputs():
         perturbed.loc[4:, k] = 1.0 - perturbed.loc[4:, k]
     segs = segmentize(perturbed, threshold_seconds=30.0)
     recs = build_window_catalog(segs, 4, 2, 1, "metropt3_chrono_502030_v2", "train", "g" * 64)
-    ds2 = MetroPTChronoDataset(segs, recs, 4, 2, _CONT_7, _CTX_8)
+    ds2 = MetroPTChronoDataset(segs, recs, 4, 2, _CONT_7, _CTX_8, median_interval=10.0)
     sample2 = ds2[0]
     assert torch.equal(sample2.X_obs, X)
     assert torch.equal(sample2.M_obs, M)
@@ -341,3 +343,100 @@ def test_v2_window_projection_matches_records():
     ds = _v2_ds(frame, stride=2)
     assert ds.windows == [(r.segment_id, r.start) for r in ds._records]
     assert len(ds) == len(ds.windows)
+
+
+# ---------------------------------------------------------------------------
+# CH34-S01-T03: real time with numerical-stable scaling
+# ---------------------------------------------------------------------------
+
+
+def _scaled_frame(hist_offsets=(0, 10, 21, 31), query_offsets=(44, 55)):
+    rows = []
+    source = 2000
+    base = pd.Timestamp("2020-01-01")
+    for off in tuple(hist_offsets) + tuple(query_offsets):
+        entry = {
+            "source_row_id": source,
+            "timestamp": base + pd.to_timedelta(off, unit="s"),
+        }
+        for c in _CONT_7:
+            entry[c] = float(source % 5)
+        for k in _CTX_8:
+            entry[k] = float((source + int(k[1])) % 2)
+        rows.append(entry)
+        source += 1
+    return pd.DataFrame(rows)
+
+
+def test_v3_scaled_time_preserves_jitter():
+    frame = _scaled_frame()
+    ds = _v2_ds(frame, H=4, P=2, median=10.0)
+    sample = ds[0]
+    assert sample.T_obs.numel() == 4 and sample.T_q.numel() == 2
+    diffs = torch.diff(sample.T_obs).numpy()
+    assert np.allclose(diffs, [1.0, 1.1, 1.0], atol=1e-4), f"diffs={diffs}"
+
+
+def test_v3_query_time_after_origin_and_same_scale():
+    frame = _scaled_frame()
+    ds = _v2_ds(frame, H=4, P=2, median=10.0)
+    sample = ds[0]
+    assert sample.T_q[0] > sample.T_obs[-1]
+    # both T_obs and T_q are seconds-from-segment-start scaled by the same
+    # median interval (10s), so the origin->first-query gap (44-31)/10 = 1.3
+    assert float(sample.T_q[0] - sample.T_obs[-1]) == pytest.approx(1.3, abs=1e-3)
+
+
+def test_v3_time_scale_artifact_records_raw_unit_and_stable_sha():
+    frame = _scaled_frame()
+    a1 = metropt_time_scale_artifact(frame)
+    a2 = metropt_time_scale_artifact(frame.copy(deep=True))
+    assert a1["unit"] == "seconds"
+    assert a1["source"] == "train"
+    assert a1["median_interval_seconds"] == pytest.approx(median_interval_seconds(frame))
+    assert a1["sha256"] == a2["sha256"]
+
+
+def _time_batch(t_obs_batch, H=4, P=2, N=7, C=8):
+    from kaf_profiti.industrial.batch import IndustrialBatch
+
+    B = t_obs_batch.shape[0]
+    torch.manual_seed(0)
+    x = torch.randn(B, H, N)
+    m = torch.ones(B, H, N)
+    m[:, 1, 2] = 0
+    m[:, 2, 1] = 0  # sparse so GRU-D delta_t varies with T_obs
+    x = x * m
+    y = torch.randn(B, P, N)
+    mq = torch.ones(B, P, N)
+    ctx = torch.rand(B, C)
+    return IndustrialBatch(
+        X_obs=x, T_obs=t_obs_batch.float(), M_obs=m, T_q=torch.zeros(B, P),
+        Y_q=y, M_q=mq, context=ctx, y_flat=y.reshape(B, -1), mq_flat=mq.reshape(B, -1),
+        query_channel_ids=torch.arange(N).repeat(P), rul=torch.zeros(B), unit_id=torch.arange(B),
+    )
+
+
+def test_v3_time_models_are_time_sensitive():
+    from kaf_profiti.baselines.point import create_point_baseline
+    from kaf_profiti.models.lightweight_head import KSTLight
+
+    t_a = torch.tensor([[0.0, 1.0, 2.1, 3.1], [0.0, 1.1, 2.0, 3.2]])
+    t_b = torch.tensor([[0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.1, 3.4]])
+    batch_a, batch_b = _time_batch(t_a), _time_batch(t_b)
+    models = {
+        "gru_d": create_point_baseline("gru_d", 7, 8, 2, hidden_dim=8),
+        "ode_rnn": create_point_baseline("ode_rnn", 7, 8, 2, hidden_dim=8),
+        "kst_light": KSTLight(
+            num_sensors=7, context_dim=8, pred_len=2, hidden_dim=8,
+            head_type="linear", te_dim=4, kernel_count=2, n_layers=1,
+            n_heads=2, preconv_dim=4, patch_lens=(2, 4),
+        ),
+    }
+    for name, model in models.items():
+        model.eval()
+        with torch.no_grad():
+            out_a = model.predict_point(batch_a)
+            out_b = model.predict_point(batch_b)
+        assert torch.isfinite(out_a).all() and torch.isfinite(out_b).all(), name
+        assert not torch.allclose(out_a, out_b, atol=1e-5), f"{name} is not time-sensitive"
