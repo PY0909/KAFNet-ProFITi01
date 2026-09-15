@@ -2777,12 +2777,12 @@ class WindowSufficientStats:
 - 修改：`code/kaf_profiti/experiments/datasets.py`
 - 测试：`code/tests/pilot/test_metropt_protocol.py`
 
-- [ ] 先写失败测试：`X_obs/Y_q/M_obs/M_q` 最后一维严格为 7，`context` 最后一维严格为 8。
-- [ ] 先写失败测试：逐个断言 7 个连续通道和 8 个 context 通道的固定顺序；列缺失、重复或顺序漂移均 hard fail。
-- [ ] 先写失败测试：任意修改 query 段 8 个状态量不得改变模型输入 `X_obs/M_obs/T_obs/context`。
-- [ ] 将 MetroPT sensor schema 改为 7 个连续目标；context 使用 history 最后 timestamp 的 8 个二值状态值。
-- [ ] 二值 context 只允许 0/1 且不做 z-score；发现其他值时报告列名、source row ID 并失败。
-- [ ] 运行目标/上下文隔离测试；预期所有 target perturbation 和 future-context perturbation 检查通过。
+- [x] 先写失败测试：`X_obs/Y_q/M_obs/M_q` 最后一维严格为 7，`context` 最后一维严格为 8。
+- [x] 先写失败测试：逐个断言 7 个连续通道和 8 个 context 通道的固定顺序；列缺失、重复或顺序漂移均 hard fail。
+- [x] 先写失败测试：任意修改 query 段 8 个状态量不得改变模型输入 `X_obs/M_obs/T_obs/context`。
+- [x] 将 MetroPT sensor schema 改为 7 个连续目标；context 使用 history 最后 timestamp 的 8 个二值状态值。
+- [x] 二值 context 只允许 0/1 且不做 z-score；发现其他值时报告列名、source row ID 并失败。
+- [x] 运行目标/上下文隔离测试；预期所有 target perturbation 和 future-context perturbation 检查通过。
 
 **验收：** 模型只预测连续状态量，且所有模型拥有完全相同的 history-only 运行上下文。
 

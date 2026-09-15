@@ -466,3 +466,108 @@ def window_catalog_sha(
             "last_window_id": records[-1].window_id if records else None,
         }
     )
+
+
+class MetroPTChronoDataset(Dataset):
+    """C-MAPSS-shaped MetroPT v2 dataset (segment-as-unit) producing a sample
+    with 7 continuous targets and an 8-dimensional binary history context.
+
+    ``segments`` is the T01 list of per-segment frames; ``records`` is the
+    T01 ``WindowRecord`` catalog. ``_units`` maps segment_id -> frame and
+    ``windows`` is ``[(segment_id, start)]`` so the timeline-mask machinery and
+    the provider can slice masks by segment the same way C-MAPSS slices by
+    engine. ``sample.unit_id`` stays the physical device id ``0``; segment and
+    window identity live on the artifact tracking record, never as an
+    independent statistical unit.
+    """
+
+    def __init__(
+        self,
+        segments,
+        records,
+        history_len: int,
+        pred_len: int,
+        continuous_columns,
+        context_columns,
+        fault_windows=None,
+        median_interval: float = None,
+    ):
+        self._units = {int(index): segment.reset_index(drop=True) for index, segment in enumerate(segments)}
+        self._records = list(records)
+        self.windows = [(record.segment_id, record.start) for record in self._records]
+        self.window_ids = [record.window_id for record in self._records]
+        self.history_len = int(history_len)
+        self.pred_len = int(pred_len)
+        self.continuous = list(continuous_columns)
+        self.context_cols = list(context_columns)
+        self.fault_windows = fault_windows
+        self.median_interval = median_interval
+        self._validate_columns()
+        self._validate_context_binary()
+
+    def _validate_columns(self):
+        required = list(self.continuous) + list(self.context_cols)
+        for segment_id, seg in self._units.items():
+            cols = list(seg.columns)
+            missing = [c for c in required if c not in cols]
+            if missing:
+                raise ValueError(f"MetroPT v2 segment {segment_id} missing column(s): {' '.join(missing)}")
+            positions = [cols.index(c) for c in required]
+            if len(set(positions)) != len(positions):
+                raise ValueError(f"MetroPT v2 segment {segment_id} has duplicate columns")
+            if positions != sorted(positions):
+                raise ValueError(
+                    "MetroPT v2 column order drift: continuous/context columns must keep fixed order"
+                )
+
+    def _validate_context_binary(self):
+        for segment_id, seg in self._units.items():
+            for col in self.context_cols:
+                bad = ~seg[col].isin([0, 1])
+                if bool(bad.any()):
+                    row_id = int(seg.loc[bad, "source_row_id"].iloc[0])
+                    raise ValueError(
+                        f"MetroPT v2 binary context column {col} has a non-0/1 value "
+                        f"at source_row_id {row_id}"
+                    )
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    def _risk(self, fut) -> float:
+        if not self.fault_windows:
+            return 0.0
+        query_ts = pd.to_datetime(fut["timestamp"])
+        for start, end in self.fault_windows:
+            if bool(((query_ts >= pd.Timestamp(start)) & (query_ts <= pd.Timestamp(end))).any()):
+                return 1.0
+        return 0.0
+
+    def __getitem__(self, index: int) -> MetroPTWindowSample:
+        record = self._records[index]
+        segment = self._units[record.segment_id]
+        hist = segment.iloc[record.start : record.start + self.history_len]
+        fut = segment.iloc[
+            record.start + self.history_len : record.start + self.history_len + self.pred_len
+        ]
+        X_obs = torch.tensor(hist[self.continuous].to_numpy(), dtype=torch.float32)
+        Y_q = torch.tensor(fut[self.continuous].to_numpy(), dtype=torch.float32)
+        M_obs = torch.ones_like(X_obs)
+        M_q = torch.ones_like(Y_q)
+        origin = hist.iloc[-1]
+        context = torch.tensor(
+            hist[self.context_cols].iloc[-1].to_numpy(dtype="float32")
+        )
+        T_obs = torch.arange(self.history_len, dtype=torch.float32)
+        T_q = torch.arange(self.history_len, self.history_len + self.pred_len, dtype=torch.float32)
+        return MetroPTWindowSample(
+            X_obs=X_obs,
+            T_obs=T_obs,
+            M_obs=M_obs,
+            T_q=T_q,
+            Y_q=Y_q,
+            M_q=M_q,
+            context=context,
+            rul=self._risk(fut),
+            unit_id=0,
+        )

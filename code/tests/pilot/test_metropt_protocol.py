@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import torch
 
 from kaf_profiti.industrial.metropt import (
     GAP_MULTIPLIER,
@@ -225,3 +226,118 @@ def test_layered_protocol_shas_are_stable_and_acyclic():
     assert time_a == time_b
     assert catalog_a == catalog_b
     assert window_catalog_sha(time_a, 5, 2, 2, records) != catalog_a
+
+
+# ---------------------------------------------------------------------------
+# CH34-S01-T02: continuous targets (7) + binary history context (8)
+# ---------------------------------------------------------------------------
+
+
+_CONT_7 = [f"C{i}" for i in range(7)]
+_CTX_8 = [f"K{i}" for i in range(8)]
+
+
+def _v2_frame(n_groups=3, rows_per_group=8, gap_after=None, cont=_CONT_7, ctx=_CTX_8):
+    rows = []
+    source = 1000
+    timestamp = pd.Timestamp("2020-01-01")
+    for group_index in range(n_groups):
+        if gap_after is not None and group_index == gap_after:
+            timestamp += timedelta(seconds=31)
+        for row in range(rows_per_group):
+            entry = {"source_row_id": source, "timestamp": timestamp}
+            for c in cont:
+                entry[c] = float(source % 5)
+            for k in ctx:
+                entry[k] = float((source + int(k[1])) % 2)
+            rows.append(entry)
+            source += 1
+        timestamp += timedelta(seconds=10)
+    return pd.DataFrame(rows)
+
+
+def _v2_ds(frame, H=4, P=2, stride=1, cont=_CONT_7, ctx=_CTX_8, **kwargs):
+    from kaf_profiti.industrial.metropt import MetroPTChronoDataset
+    from kaf_profiti.industrial.metropt import build_window_catalog
+    from kaf_profiti.industrial.metropt import segmentize
+
+    segments = segmentize(frame, threshold_seconds=30.0)
+    records = build_window_catalog(
+        segments, H, P, stride, "metropt3_chrono_502030_v2", "train", "g" * 64
+    )
+    return MetroPTChronoDataset(
+        segments, records, H, P, cont, ctx, **kwargs
+    )
+
+
+def test_v2_targets_and_context_shapes():
+    frame = _v2_frame(n_groups=1)
+    ds = _v2_ds(frame)
+    sample = ds[0]
+    assert sample.X_obs.shape == (4, 7)
+    assert sample.Y_q.shape == (2, 7)
+    assert sample.M_obs.shape == (4, 7)
+    assert sample.M_q.shape == (2, 7)
+    assert sample.context.shape == (8,)
+    assert sample.unit_id == 0
+    assert sample.T_obs.numel() == 4 and sample.T_q.numel() == 2
+
+
+def test_v2_context_is_last_history_observation_and_binary():
+    frame = _v2_frame(n_groups=1)
+    ds = _v2_ds(frame)
+    sample = ds[0]
+    segment = ds._units[0]
+    origin = segment.iloc[3]  # last history row for window start=0, H=4
+    expected = torch.tensor([origin[k] for k in _CTX_8], dtype=torch.float32)
+    assert torch.allclose(sample.context, expected)
+    assert set(sample.context.numpy().tolist()) <= {0.0, 1.0}
+
+
+def test_v2_query_context_perturbation_does_not_change_model_inputs():
+    frame = _v2_frame(n_groups=1)
+    ds = _v2_ds(frame)
+    sample = ds[0]
+    X, M, T, ctx = sample.X_obs, sample.M_obs, sample.T_obs, sample.context
+
+    from kaf_profiti.industrial.metropt import MetroPTChronoDataset
+    from kaf_profiti.industrial.metropt import build_window_catalog
+    from kaf_profiti.industrial.metropt import segmentize
+
+    perturbed = frame.copy(deep=True)
+    # flip the binary context values on query rows only (rows beyond H)
+    for k in _CTX_8:
+        perturbed.loc[4:, k] = 1.0 - perturbed.loc[4:, k]
+    segs = segmentize(perturbed, threshold_seconds=30.0)
+    recs = build_window_catalog(segs, 4, 2, 1, "metropt3_chrono_502030_v2", "train", "g" * 64)
+    ds2 = MetroPTChronoDataset(segs, recs, 4, 2, _CONT_7, _CTX_8)
+    sample2 = ds2[0]
+    assert torch.equal(sample2.X_obs, X)
+    assert torch.equal(sample2.M_obs, M)
+    assert torch.equal(sample2.T_obs, T)
+    assert torch.equal(sample2.context, ctx)
+
+
+def test_v2_rejects_reordered_or_missing_columns():
+    frame = _v2_frame(n_groups=1)
+    # reorder context columns relative to continuous -> must fail on order
+    with pytest.raises(ValueError, match="order"):
+        _v2_ds(frame, ctx=_CTX_8[::-1])
+    # frame missing a continuous column -> must fail on missing
+    dropped = frame.drop(columns=["C3"])
+    with pytest.raises(ValueError, match="missing"):
+        _v2_ds(dropped)
+
+
+def test_v2_rejects_non_binary_context_value_with_source_row_id():
+    frame = _v2_frame(n_groups=1)
+    frame.loc[2, "K3"] = 2.0  # non-binary on a history row
+    with pytest.raises(ValueError, match="K3"):
+        _v2_ds(frame)
+
+
+def test_v2_window_projection_matches_records():
+    frame = _v2_frame(n_groups=1)
+    ds = _v2_ds(frame, stride=2)
+    assert ds.windows == [(r.segment_id, r.start) for r in ds._records]
+    assert len(ds) == len(ds.windows)

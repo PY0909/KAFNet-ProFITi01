@@ -611,3 +611,21 @@
 - Verification run: 新测试先 red（`WindowRecord` import 缺失）后 green；T01 测试 `10 passed`；真实 CSV 集成不变量通过；全量 `code/tests/` `240 passed`；`git diff --check` OK。
 - Review result: 规格符合性复审 `PASS`；旧协议回归 `PASS`。
 - Remaining risk: T01 helper 尚未接入 provider，不能启动 MetroPT 训练；T02 必须在此 catalog 上补齐 7 连续 target/8 binary context；T04 才能生成 normalization/protocol SHA 并注册 v2。
+
+## 2026-09-15 CH34-S01-T02 MetroPT-3 连续目标与二值历史 context
+
+- 阶段：S4 Reconstruction / MetroPT-3 协议重建。
+- 范围：完成 T02，在 T01 catalog 上实现 `MetroPTChronoDataset`，用 7 连续目标 + 8 二值历史 context 填全 `__getitem__`；尚未接入 provider、真实时间（T03）、归一化/mask（T04）、learnability/风险门禁（T05）。
+- 实现：`METROPT_CONTINUOUS_COLUMNS`(7)、`METROPT_BINARY_CONTEXT_COLUMNS`(8) 常量；`MetroPTChronoDataset` 暴露 `_units`(segment->frame)、`windows`((segment_id,start))、`window_ids`，`__getitem__` 返回 `X_obs/Y_q/M_obs/M_q` 末维 7、`context` 末维 8（origin 前最后观测）、`unit_id=0`；构造期校验列固定顺序/缺失/重复与二值 0/1（报告列名+source_row_id）。
+- 防护测试：6 项 T02 用例——shape、context=last history、query 段 8 状态量扰动不改 X/M/T/context、列顺序/缺失 hard-fail、非 0/1 报列名+source_row_id、window 投影一致。全量 `test_metropt_protocol.py` 16 passed。
+
+### Capability-use audit
+
+- Required skills: executing-plans, test-driven-development, verification, verification-before-completion
+- Skills actually used: executing-plans, test-driven-development, verification, verification-before-completion
+- Inputs consumed: T01 catalog、`MetroPTWindowSample`/`IndustrialCollator` 契约、§13.2 列分离合同。
+- Inputs not used and why: 未接入 provider 或 `create_protocol_datasets`（T04）；未实现真实时间（T03）；未做归一化/mask（T04）；未触 GPU。
+- Artifacts produced: `MetroPTChronoDataset`、6 项 T02 测试、T02 计划勾选、本条目。
+- Verification run: T02 测试先 red（`MetroPTChronoDataset` 缺失 + object-dtype 修复 + torch import/测试用例修正）后 green；全量 `code/tests/` 246 passed；真实 MetroPT 冒烟 `X_obs(168,7)/Y_q(24,7)/context(8)`、unit_id=0。
+- Review result: 规格符合性 `PASS`；旧协议回归 `PASS`。
+- Remaining risk: 真实时间仍为 arange（T03 替换）；归一化/mask 未接入（T04）；真实故障风险标签 `rul` 已按 fault-window 交集计算，但正式风险口径在 T05 复核。
