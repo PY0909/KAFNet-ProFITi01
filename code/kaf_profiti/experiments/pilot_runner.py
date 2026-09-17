@@ -40,6 +40,18 @@ PROFILE_DATASETS = {
     "fd004": "cmapss_fd004",
     "metropt3": "metropt3_chrono_502030_v2",
 }
+
+# Global gradient-clipping norm for every pilot training step. This restores
+# the repository's established training recipe — ``run_experiment.py``,
+# ``train_metropt_kaf_profiti.py``, and ``train_cmapss_kaf_profiti.py`` all
+# clip at 1.0 — which the first pilot runner draft omitted. Applied uniformly
+# to every model (baselines and ours); optimizer lr/budget are unchanged.
+# Local 2026-09-17 diagnostics: without clipping the adapted Euler-expansion
+# ODE-RNN diverges (grad-norm peaks ~6.6e7, valid MAE 9.30 vs persistence
+# floor 0.9159); with clip=1.0 and the frozen lr=1e-3 it reaches valid MAE
+# 0.747 within 6 epochs.
+GRAD_CLIP_NORM = 1.0
+
 _PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _CODE_FINGERPRINT_CACHE: Dict[str, tuple] = {}
 
@@ -427,6 +439,7 @@ def _train_one_epoch(model, loader, optimizer, device):
         optimizer.zero_grad()
         loss = model.loss(batch)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
         optimizer.step()
         total += loss.detach().item()
         count += 1

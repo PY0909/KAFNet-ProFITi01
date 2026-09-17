@@ -435,7 +435,12 @@ class ODERNNPoint(_PooledPointBaseline):
         "by the real elapsed time between historical observations and is "
         "updated by a GRUCell at each observation step; adapted: Euler "
         "integration with a learned tanh vector field instead of a black-box "
-        "adjoint ODE solver"
+        "adjoint ODE solver. The Euler expansion is multiplicative over the "
+        "time gap, which makes it sensitive to gradient scale; training "
+        "therefore relies on the shared global grad-norm clip (1.0, the "
+        "repository's established recipe) — without clipping this adapted "
+        "implementation diverges (2026-09-17 local diagnostic: grad-norm "
+        "peaks ~6.6e7, valid MAE 9.30 vs persistence floor 0.9159)"
     )
     REQUIRES_TIME_INPUT = True
     ADAPTER = (

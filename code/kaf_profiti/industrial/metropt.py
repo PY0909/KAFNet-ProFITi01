@@ -280,11 +280,22 @@ def load_metropt_frame_v2(data_dir) -> pd.DataFrame:
 
 
 def median_interval_seconds(frame: pd.DataFrame, timestamp: str = "timestamp") -> float:
-    """Median inter-sample interval (seconds) over unique sorted timestamps."""
+    """Median inter-sample interval (seconds) over unique sorted timestamps.
+
+    Unit-robust by construction: ``.dt.total_seconds()`` works on any
+    datetime64 resolution. (The earlier ``astype("int64") / 1e9`` assumed
+    nanosecond resolution — true for pandas 2.x, but pandas 3.0 changed the
+    default datetime unit to microseconds, silently shrinking the interval
+    1000x, collapsing every segment, and emptying the window catalog.)
+    """
     import numpy as np
 
-    values = pd.to_datetime(frame[timestamp]).drop_duplicates().sort_values().astype("int64").to_numpy()
-    diffs = np.diff(values) / 1e9 if len(values) > 1 else []
+    values = pd.to_datetime(frame[timestamp]).drop_duplicates().sort_values()
+    diffs = (
+        values.diff().dropna().dt.total_seconds().to_numpy()
+        if len(values) > 1
+        else []
+    )
     if len(diffs) == 0 or np.all(diffs <= 0):
         raise ValueError("cannot derive a positive median sample interval")
     return float(np.median(diffs))
@@ -439,12 +450,16 @@ def raw_data_sha(frame, value_columns, timestamp="timestamp", source="source_row
     """
     import numpy as np
 
+    # Normalize to nanosecond resolution before the int64 cast: pandas 2.x
+    # datetimes are already ns, but pandas 3.0 defaults to microseconds, which
+    # would silently change every timestamp byte and thus the identity SHA.
+    timestamps_ns = pd.to_datetime(frame[timestamp]).astype("datetime64[ns]")
     columns = list(value_columns)
     digest = hashlib.sha256()
     digest.update(("|".join(columns)).encode("utf-8"))
     digest.update(b"\x00")
     digest.update(np.asarray(frame[source], dtype=np.int64).tobytes())
-    digest.update(np.asarray(pd.to_datetime(frame[timestamp]).astype("int64"), dtype=np.int64).tobytes())
+    digest.update(np.asarray(timestamps_ns.astype("int64"), dtype=np.int64).tobytes())
     digest.update(np.asarray(frame[columns], dtype=np.float64).tobytes())
     return digest.hexdigest()
 

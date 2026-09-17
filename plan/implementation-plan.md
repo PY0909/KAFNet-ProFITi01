@@ -2953,6 +2953,7 @@ class WindowSufficientStats:
 - [x] 检查 loss 有限、参数发生更新、validation MAE 至少一次优于初始化模型，并与 data gate 的 history-only floor 比较。（finite=true、updated=true、validation_improved=true：init_valid_mae 0.9996 → best_valid_mae 0.3986；beat_naive=true，本机 data_gate 核对 0.3986 < persistence raw 0.9159，改善 56.5%）
 - [x] 若 learned model 完全不优于 best naive floor，则停止后续 GPU 调度，进入数据/优化诊断；不得为了过门禁读取 test。（不触发：best 0.3986 显著优于 best naive floor persistence 0.9159）
 - [x] 若通过，登记固定优化器和训练预算；本轮不进行 learning-rate sweep 或模型特异调参。（固定 AdamW lr=1e-3 weight_decay=1e-4，5 epoch，batch 128）
+  - **2026-09-17 修订登记：** 全局梯度裁剪 `grad_clip_norm=1.0` 补入固定训练配方。这不是新增科学配置，而是对齐仓库既有训练入口（`run_experiment.py`、`train_metropt_kaf_profiti.py`、`train_cmapss_kaf_profiti.py` 均为 clip=1.0）——首个 pilot runner 实现遗漏了它。证据：无裁剪时 adapted Euler ODE-RNN 在中心条件发散（梯度范数峰值 ~6.6e7，valid MAE 9.30 vs persistence floor 0.9159，20 epoch 最好 1.10 仍不达标）；clip=1.0 + lr 不变，6 epoch 即 valid MAE 0.747 越过 floor；lr=1e-4 对照更差，故 lr 保持 1e-3。裁剪统一作用于全部模型（baseline 与本文），不引入 per-model 差异；回归测试 `code/tests/pilot/test_grad_clipping.py` 钉死该配方（4 passed）。此次修订改变训练循环 → code SHA 变化，跨机 preflight 与 5-epoch sanity 须在新 commit 上重做，且下轮 sanity 应将 ODE-RNN 纳入（此前只跑 LI+TCN）。
 
 **验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。 ✅
 
@@ -2961,6 +2962,8 @@ class WindowSufficientStats:
 ---
 
 ### CH3-S04：第三章中心条件单种子对比
+
+> **训练配置基线（2026-09-17 确立）：** 本 Phase 全部 run（含后续 S05/S06 扩展）使用固定配方 AdamW lr=1e-3 / weight_decay=1e-4 / **全局 grad_clip_norm=1.0** / batch 128。裁剪为仓库既有入口的既定配方恢复（详见 CH34-S03-T02 修订登记），统一作用于所有模型，不构成模型特异调参。执行位置：AutoDL 有卡模式；本机只允许 dry-run/smoke/单 epoch 计时，不产生正式 artifact。
 
 - [ ] **Phase CH3-S04 完成：5 个 baseline 先完成，随后 KST-Light 两个 head 完成**
 
