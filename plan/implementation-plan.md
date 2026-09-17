@@ -2933,16 +2933,18 @@ class WindowSufficientStats:
 
 #### Task CH34-S03-T01：冻结版本并核对跨机身份
 
-- [ ] 完成 S02 审查修复、本机全量测试、data gate、49-key dry-run、14-entry smoke 与 portability 检查；只暂存允许的代码、配置、测试和计划文档，形成 clean commit 并记录 Git SHA。
-- [ ] 在该 clean commit 上运行 `--profile metropt3 --require-clean` 生成本机 v2 preflight；不得在 commit 前生成报告并把旧 SHA 当作冻结证据。
-- [ ] profile-aware checker 从实际 MetroPT CSV 重算 raw/partition/timeline/window/normalization/time-scale/target/evaluator 身份，并为中心 `mixed@0.30` 生成 mask 身份；不得依赖未同步的本机 `data_gate.json`。
-- [ ] AutoDL 只 checkout 同一 commit，不直接编辑 checkout；数据根、结果根和缓存根只通过环境变量设置，且 `git status --porcelain` 必须为空。
-- [ ] 在 AutoDL 运行 `--profile metropt3 --require-clean --require-gpu --smoke`；只执行 LI+TCN 中心条件单 batch CUDA 更新，`test_metric_count=0`。
-- [ ] 比较 local/AutoDL v2 reports：Git commit、MetroPT raw data、两矩阵、split/partition/timeline/window、normalization、time-scale、mask、target、evaluator 和 code SHA 必须一致；路径、环境名和硬件字段不参与身份相等判断。
-- [ ] 记录 GPU、CUDA、PyTorch、可用显存、磁盘、报告相对路径与报告文件 SHA；不修改或纳入遗留根目录 `autodl-preflight.json`。
-- [ ] 只有 clean=true、identity sections match 且 GPU smoke 通过后才勾选本 Task；T02 的 5-epoch validation-only 训练和 CH34-S03 Phase 保持未完成。
+- [x] 完成 S02 审查修复、本机全量测试、data gate、49-key dry-run、14-entry smoke 与 portability 检查；只暂存允许的代码、配置、测试和计划文档，形成 clean commit 并记录 Git SHA。（freeze commit `7d2a99e`；本机 314 passed；49/49 dry-run；smoke 5/6/3；portability 5 passed）
+- [x] 在该 clean commit 上运行 `--profile metropt3 --require-clean` 生成本机 v2 preflight；不得在 commit 前生成报告并把旧 SHA 当作冻结证据。（local-preflight.json 于 `7d2a99e` 生成，SHA256 `018474ab…2576`）
+- [x] profile-aware checker 从实际 MetroPT CSV 重算 raw/partition/timeline/window/normalization/time-scale/target/evaluator 身份，并为中心 `mixed@0.30` 生成 mask 身份；不得依赖未同步的本机 `data_gate.json`。（checker 只 import pilot_runner/矩阵；raw=`48f6c4a6`、split=`eb7b957c`；3 个 mask bundle）
+- [x] AutoDL 只 checkout 同一 commit，不直接编辑 checkout；数据根、结果根和缓存根只通过环境变量设置，且 `git status --porcelain` 必须为空。（AutoDL checkout `7d2a99e`，dirty_file_count=0）
+- [x] 在 AutoDL 运行 `--profile metropt3 --require-clean --require-gpu --smoke`；只执行 LI+TCN 中心条件单 batch CUDA 更新，`test_metric_count=0`。（model=li_tcn、cond=point_mixed_030、device=cuda、ok=true、batch_time=0.364s）
+- [x] 比较 local/AutoDL v2 reports：Git commit、MetroPT raw data、两矩阵、split/partition/timeline/window、normalization、time-scale、mask、target、evaluator 和 code SHA 必须一致；路径、环境名和硬件字段不参与身份相等判断。（`compare_reports` → IDENTITY_SECTIONS_MATCH）
+- [x] 记录 GPU、CUDA、PyTorch、可用显存、磁盘、报告相对路径与报告文件 SHA；不修改或纳入遗留根目录 `autodl-preflight.json`。（RTX 3090/CUDA 12.4/torch 2.5.1+cu124/24135MB/41.63GB free；autodl-preflight.json SHA256 `2944854b…c336`，遗留根目录资产 mtime 未变、未纳入）
+- [x] 只有 clean=true、identity sections match 且 GPU smoke 通过后才勾选本 Task；T02 的 5-epoch validation-only 训练和 CH34-S03 Phase 保持未完成。
 
-**验收：** scientific identity 完全一致且 AutoDL checkout clean，才能开始短训练。
+**验收：** scientific identity 完全一致且 AutoDL checkout clean，才能开始短训练。 ✅（跨机身份一致，进入 T02 前置条件已满足）
+
+**漂移修复记录（本次执行中新发现并解决）：** 首次跨机比较暴露 9 个协议身份字段漂移（raw/partition/split/timeline×3/window_catalog×3），而 normalization/time-scale/mask/realized_rate/code 全部一致。TZ=UTC/Asia/Shanghai 双跑排除时区假设；组件级二分定位根因：pandas `read_csv` 默认浮点解析（xstrtod）允许 ~1ULP 误差且随构建变化——本机 arm64 默认解析（raw=`27064b05`，split=`90650166`）与 AutoDL x86_64 默认解析（raw=`48f6c4a6`，split=`eb7b957c`=正确舍入值）在全部 7 个连续通道字节不同，ULP 级差异在统计层被冲掉，故既有一致性检查全部通过。修复 `load_metropt_frame_v2` 与 v1 加载器显式 `float_precision="round_trip"`（IEEE754 正确舍入、平台唯一），新增红→绿测试钉死 loader 输出与 round_trip 参照逐字节一致。规范身份链 split=`eb7b957c…`；过期 mask bundle（内嵌旧身份）归档至 `masks_superseded_20260917_default_parse/`；data gate 与 14-entry smoke 在规范解析下重建，全量 314 passed。
 
 #### Task CH34-S03-T02：执行 LI+TCN validation-only 短训练
 

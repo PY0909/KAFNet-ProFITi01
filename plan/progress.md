@@ -809,3 +809,26 @@
 - S03-T01 准备：`check_pilot_environment.py` 升级为 v2 profile-aware checker，profile 映射复用 runner 单一真源；MetroPT 报告从实际 CSV 重算 raw/partition/timeline/window/normalization/time-scale/target/evaluator 并生成中心 mask；code fingerprint 与 runner 同时覆盖 `code/` 和 `compare_code/`；新增 `--profile`、`--require-clean`，smoke 固定 LI+TCN + `point_mixed_030` 且 `test_metric_count=0`。遗留根目录 `autodl-preflight.json` 仅通过精确 ignore 规则排除，文件未修改、未删除、未作为证据。
 - 验证：新测试先 red 后 green；S02/S03 定向 90 项中仅沙箱内两个 CLI 子进程受 OpenMP SHM 限制，沙箱外 preflight `10 passed`；最终全量沙箱外 `313 passed, 2 warnings`；MetroPT all dry-run `49/49`；真实 smoke 为 point baseline `5/5`、probabilistic baseline `6/6`、ours `3/3`，合计 failed=0、test metrics=0；portability `3 passed`；`py_compile` 与 `git diff --check` 通过。
 - 未执行：尚未创建 clean commit、push、AutoDL checkout、GPU smoke 或跨机 report comparison；因此 CH34-S03-T01、T02 和 Phase S03 均保持未勾选。最近 20 个提交中的既有约定已核对为 `Co-Authored-By: Claude Code <noreply@anthropic.com>`，后续提交沿用该格式。
+
+## 2026-09-17 CH34-S03-T01 冻结版本并核对跨机身份
+
+- 阶段：S4 Reconstruction / CH34-S03 AutoDL 环境预检门禁；本条目完成 T01，T02 与 Phase S03 保持未完成。
+- 执行：完成 S02 全部前置后形成 clean commit `dded1cc`，在其上生成 local v2 preflight 并 push；AutoDL checkout 同一 SHA 生成 autodl-preflight + GPU smoke 后拉回本机做跨机比较。
+- 首次比较暴露 9 个协议身份字段漂移（raw/partition/split/timeline×3/window_catalog×3），而 normalization/time-scale/mask/realized_rate/code/矩阵全部一致；`TZ=UTC/Asia/Shanghai` 双跑排除时区假设。
+- 根因（组件级二分定位）：pandas `read_csv` 默认浮点解析（xstrtod）允许 ~1ULP 误差且随构建变化——本机 arm64 默认解析（raw=`27064b05`，split=`90650166`）与 AutoDL x86_64 默认解析（raw=`48f6c4a6`，split=`eb7b957c`=正确舍入值）在全部 7 个连续通道字节不同；ULP 级差异在统计层被冲掉，故既有一致性检查（包括 S01 门禁、S02 smoke 指纹唯一）全部通过——再次印证"一致性检查测不出系统性错误"的教训。
+- 修复：`load_metropt_frame_v2` 与 v1 加载器均显式 `float_precision="round_trip"`（IEEE754 正确舍入、平台唯一）；新增红→绿测试 `test_v2_loader_float_parse_is_platform_independent` 钉死 loader 输出与 round_trip 参照逐字节一致。
+- 证据链重建（规范解析下）：过期 mask bundle（内嵌旧身份）归档至 `result/pilot/metropt3/protocol/masks_superseded_20260917_default_parse/`；data gate 重建（pass，persistence 58.16413274094018% 与旧值逐位相同）；14-entry smoke 重建（point 5/prob 6/ours 3，failed=0、test_metrics=0，三组共享唯一指纹）；local/autodl preflight 均在修复 commit `7d2a99e` 上重新生成。
+- 机器证据（AutoDL）：RTX 3090 ×1、CUDA 12.4、torch 2.5.1+cu124、Python 3.12.3、显存 24135 MB、磁盘 free 41.63/50 GB；CSV sha256 `db30ccb4…e24`；code sha256 `723e5263…a354`（85 files）；split_sha256 `eb7b957c…58cb`。
+- 跨机比较：`compare_reports` 全量 identity sections 一致（Git commit、raw data、两矩阵、split/partition/timeline/window、normalization、time-scale、mask、target、evaluator、code SHA），路径/环境名/硬件字段按设计不参与比较。
+- 验收：T01 六项全部通过；local-preflight.json SHA256 `018474ab…2576`、autodl-preflight.json SHA256 `2944854b…c336`；遗留根目录 `autodl-preflight.json` 未修改、未纳入（仅 gitignore 排除）。
+
+### Capability-use audit
+
+- Required skills：executing-plans、verification、verification-before-completion、debugging。
+- Skills actually used：跨机 preflight 比较、组件级二进制二分、TZ 对照实验、红→绿测试、证据链重建。
+- Inputs consumed：T01 合同、check_pilot_environment v2、pilot_runner 协议指纹、MetroPT CSV、AutoDL 远端 checkout。
+- Inputs not used and why：未访问 test target；未运行 T02 5-epoch 训练；未触碰遗留 `autodl-preflight.json`。
+- Artifacts produced：`code/kaf_profiti/industrial/metropt.py`（round_trip 修复）、`code/tests/pilot/test_metropt_protocol.py`（新合同测试）、两份 preflight 报告、归档目录。
+- Verification run：修复前全量 313 passed；修复后全量 314 passed（含新红→绿测试）；49-key dry-run；portability 5 passed；跨机 `compare_reports` 通过。
+- Review result：T01 验收六项通过；规范身份 split=`eb7b957c` 内部自洽（data gate / smoke 指纹 / preflight 三方一致）。
+- Remaining risk：`float_precision="round_trip"` 未覆盖除 MetroPT 外的其它 CSV 读取路径（C-MAPSS/TEP 未纳入本轮协议身份链）；T02 短训练、Phase S03 未执行。
