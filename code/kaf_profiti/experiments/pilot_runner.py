@@ -13,6 +13,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -696,6 +697,69 @@ def _serialize_state(state_dict: Dict) -> bytes:
     buffer = io.BytesIO()
     torch.save(state_dict, buffer)
     return buffer.getvalue()
+
+
+def pilot_sanity_train(
+    model,
+    loaders,
+    spec: PilotRunSpec,
+    provider,
+    device: str = "cpu",
+    epochs: int = 5,
+) -> Dict[str, object]:
+    """CH34-S03-T02: validation-only learnability sanity (never touches test).
+
+    Trains a fixed number of epochs on the train split, scores every epoch on
+    the validation split, and reports the three gate flags — ``finite``,
+    ``updated``, ``validation_improved`` — plus an init-model baseline. The
+    test loader is deliberately ignored and no prediction artifact is produced,
+    so this outcome can never be mistaken for a complete pilot run.
+    """
+
+    device = torch.device(device)
+    model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    before = [value.detach().clone() for value in model.parameters()]
+    init_valid_mae = _valid_score(
+        model, loaders["valid"], device, spec.track, nsamples=spec.nsamples
+    )
+    history = [{"epoch": 0, "valid_score": init_valid_mae}]
+    best_valid_mae = init_valid_mae
+    best_epoch = 0
+    train_start = time.perf_counter()
+    for epoch in range(1, epochs + 1):
+        train_loss = _train_one_epoch(model, loaders["train"], optimizer, device)
+        valid_mae = _valid_score(
+            model, loaders["valid"], device, spec.track, nsamples=spec.nsamples
+        )
+        history.append(
+            {"epoch": epoch, "train_loss": train_loss, "valid_score": valid_mae}
+        )
+        if valid_mae < best_valid_mae:
+            best_valid_mae = valid_mae
+            best_epoch = epoch
+    train_time = time.perf_counter() - train_start
+    finite = all(
+        math.isfinite(entry.get("valid_score", float("nan")))
+        and ("train_loss" not in entry or math.isfinite(entry["train_loss"]))
+        for entry in history
+    )
+    updated = any(
+        not torch.equal(before_value, current_value.detach())
+        for before_value, current_value in zip(before, model.parameters())
+    )
+    return {
+        "history": history,
+        "init_valid_mae": init_valid_mae,
+        "best_valid_mae": best_valid_mae,
+        "best_epoch": best_epoch,
+        "finite": bool(finite),
+        "updated": bool(updated),
+        "validation_improved": bool(best_valid_mae < init_valid_mae),
+        "train_time_sec": train_time,
+        "epochs_run": epochs,
+        "device": str(device),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1534,6 +1598,112 @@ class PilotRunner:
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         return report
+
+    # -- sanity train (CH34-S03-T02) -----------------------------------------
+
+    def _sanity_dir(self) -> Path:
+        """Isolation root for the learnability sanity; resume/gating never scan it."""
+
+        return self.result_root / self.pilot_root / "sanity"
+
+    def _naive_floor_reference(self) -> Dict[str, object]:
+        """Best history-only validation floor from the S01 data gate."""
+
+        path = self.result_root / self.pilot_root / "diagnostics" / "data_gate.json"
+        if not path.is_file():
+            return {"available": False}
+        gate = json.loads(path.read_text(encoding="utf-8"))
+        persistence = gate.get("floors", {}).get("valid", {}).get("persistence", {})
+        return {
+            "available": True,
+            "persistence_mae_raw": persistence.get("mae"),
+            "persistence_mae_std_micro": persistence.get("std_micro", {}).get("mae"),
+            "learnability_gate": gate.get("learnability_gate", {}).get("result"),
+            "note": (
+                "data_gate floors aggregate every query position; sanity valid_mae "
+                "aggregates masked query positions only (mixed@0.30, expected close)."
+            ),
+        }
+
+    def run_sanity_train(
+        self,
+        epochs: int = 5,
+        provider_factory: Optional[Callable] = None,
+    ) -> Dict[str, object]:
+        """CH34-S03-T02: one fixed-model validation-only learnability sanity.
+
+        Selects the point-track ``li_tcn`` spec at ``point_mixed_030``, trains
+        it for ``epochs`` epochs without ever loading the test split, and writes
+        the outcome under ``sanity/`` (not ``runs/``) so resume and gating never
+        see it as a complete pilot run.
+        """
+
+        factory = provider_factory or _build_provider
+        specs = [
+            spec
+            for spec in self.expand()
+            if spec.track == "point"
+            and spec.model_id == "li_tcn"
+            and spec.condition_id == "point_mixed_030"
+        ]
+        if len(specs) != 1:
+            raise ValueError(
+                f"sanity_train expects exactly one li_tcn@point_mixed_030 point spec, "
+                f"got {len(specs)}: {[spec.key for spec in specs]}"
+            )
+        spec = specs[0]
+        provider_cache: Dict[tuple, object] = {}
+        torch.manual_seed(spec.seed)
+        provider = self._provider(spec, factory, provider_cache)
+        protocol_sha = self._protocol_fingerprint(provider)
+        self._validate_provider_condition(spec, protocol_sha)
+        model = build_model(
+            spec,
+            provider.num_sensors,
+            provider.context_dim,
+            provider.model_options,
+            device=self.device,
+        )
+        loaders = _loaders(provider, spec.batch_size, spec.seed)
+        outcome = pilot_sanity_train(
+            model, loaders, spec, provider, device=self.device, epochs=epochs
+        )
+        naive_floor = self._naive_floor_reference()
+        beat_naive = (
+            outcome["best_valid_mae"] < naive_floor["persistence_mae_raw"]
+            if naive_floor.get("available")
+            else None
+        )
+        run_dir = self._sanity_dir() / spec.key
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "history.json").write_text(
+            json.dumps(outcome["history"], ensure_ascii=False), encoding="utf-8"
+        )
+        manifest = {
+            **self._manifest_identity(spec),
+            "run_level": "sanity_train",
+            "run_id": spec.key,
+            "status": "completed",
+            "error": "",
+            "device": str(outcome["device"]),
+            "protocol_sha": protocol_sha,
+            "shared_artifacts": self._shared_artifacts(),
+            "code_fingerprint": self.code_fingerprint,
+            "sanity_epochs": outcome["epochs_run"],
+            "finite": outcome["finite"],
+            "updated": outcome["updated"],
+            "validation_improved": outcome["validation_improved"],
+            "init_valid_mae": outcome["init_valid_mae"],
+            "best_valid_mae": outcome["best_valid_mae"],
+            "best_epoch": outcome["best_epoch"],
+            "naive_floor": naive_floor,
+            "beat_naive": beat_naive,
+            "test_evaluation_count": 0,
+        }
+        (run_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return manifest
 
 
 def _with_smoke_dims(spec: PilotRunSpec, hidden_dim: Optional[int], pred_len: int) -> PilotRunSpec:

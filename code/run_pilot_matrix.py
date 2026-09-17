@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified dataset-profile pilot matrix runner")
     parser.add_argument("--profile", choices=tuple(PROFILE_DATASETS), default="fd004")
-    parser.add_argument("--mode", choices=("dry-run", "smoke", "full"), default="dry-run")
+    parser.add_argument("--mode", choices=("dry-run", "smoke", "full", "sanity"), default="dry-run")
     parser.add_argument("--matrix", choices=("point", "probabilistic", "all"), default="all")
     parser.add_argument(
         "--group",
@@ -68,6 +68,12 @@ def parse_args() -> argparse.Namespace:
         "--num-workers",
         default="auto",
         help="DataLoader worker processes; auto resolves to 4 on GPU hosts, else 0",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=5,
+        help="sanity mode only: fixed train/validation epoch budget (default 5)",
     )
     return parser.parse_args()
 
@@ -122,6 +128,11 @@ def main() -> int:
                 ),
                 flush=True,
             )
+        return 0
+
+    if args.mode == "sanity":
+        summary = runner.run_sanity_train(epochs=args.epochs)
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     summary = runner.execute(
