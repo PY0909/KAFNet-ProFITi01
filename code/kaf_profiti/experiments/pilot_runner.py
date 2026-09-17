@@ -1642,13 +1642,17 @@ class PilotRunner:
         self,
         epochs: int = 5,
         provider_factory: Optional[Callable] = None,
+        model_id: str = "li_tcn",
     ) -> Dict[str, object]:
-        """CH34-S03-T02: one fixed-model validation-only learnability sanity.
+        """CH34-S03-T02: one-model validation-only learnability sanity.
 
-        Selects the point-track ``li_tcn`` spec at ``point_mixed_030``, trains
-        it for ``epochs`` epochs without ever loading the test split, and writes
-        the outcome under ``sanity/`` (not ``runs/``) so resume and gating never
-        see it as a complete pilot run.
+        Selects the point-track ``model_id`` spec at ``point_mixed_030``
+        (default ``li_tcn``, the registered gate model) and trains it for
+        ``epochs`` epochs without ever loading the test split, writing the
+        outcome under ``sanity/`` (not ``runs/``) so resume and gating never
+        see it as a complete pilot run. The 2026-09-17 grad-clip revision
+        requires the next sanity round to also cover ODE-RNN, which this
+        entry accepts through ``model_id``.
         """
 
         factory = provider_factory or _build_provider
@@ -1656,12 +1660,12 @@ class PilotRunner:
             spec
             for spec in self.expand()
             if spec.track == "point"
-            and spec.model_id == "li_tcn"
+            and spec.model_id == model_id
             and spec.condition_id == "point_mixed_030"
         ]
         if len(specs) != 1:
             raise ValueError(
-                f"sanity_train expects exactly one li_tcn@point_mixed_030 point spec, "
+                f"sanity_train expects exactly one {model_id}@point_mixed_030 point spec, "
                 f"got {len(specs)}: {[spec.key for spec in specs]}"
             )
         spec = specs[0]

@@ -5,6 +5,8 @@ Modes:
   dry-run  ordered scientific keys, model order, shared artifact SHAs,
            expected new-training count (default; writes nothing)
   smoke    one-batch per-model validation for a group; never produces test metrics
+  sanity   validation-only short training per requested model (--model-id,
+           default li_tcn); never touches the test split
   full     full train/validation/test pilot runs with baseline-first gating
 
 All roots resolve through ``resolve_runtime_paths`` (CLI flag, then
@@ -53,7 +55,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-id", action="append", default=None,
-        help="narrow to a model id (repeatable); unknown ids are rejected",
+        help="narrow to a model id (repeatable); unknown ids are rejected; "
+        "sanity mode trains these models (default li_tcn)",
     )
     parser.add_argument(
         "--force-rerun", action="store_true",
@@ -131,9 +134,17 @@ def main() -> int:
         return 0
 
     if args.mode == "sanity":
-        summary = runner.run_sanity_train(epochs=args.epochs)
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
-        return 0
+        # The 2026-09-17 grad-clip revision requires the next sanity round to
+        # cover ODE-RNN alongside the registered li_tcn gate model.
+        gate_failed = False
+        for model_id in (args.model_id or ["li_tcn"]):
+            manifest = runner.run_sanity_train(epochs=args.epochs, model_id=model_id)
+            print(json.dumps(manifest, ensure_ascii=False, indent=2), flush=True)
+            if not all(
+                manifest[flag] for flag in ("finite", "updated", "validation_improved")
+            ):
+                gate_failed = True
+        return 1 if gate_failed else 0
 
     summary = runner.execute(
         family=args.family,

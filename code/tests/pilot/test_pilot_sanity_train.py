@@ -2,6 +2,7 @@
 
 import json
 import math
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from kaf_profiti.experiments.pilot_runner import (
 from kaf_profiti.industrial.batch import IndustrialBatch
 
 
-def _sanity_matrix(tmp_path):
+def _sanity_matrix(tmp_path, models=None):
     payload = {
         "matrix_id": "tiny_sanity_point",
         "dataset": "metropt3_chrono_502030_v2",
@@ -37,7 +38,7 @@ def _sanity_matrix(tmp_path):
                 "target_missing_rate": 0.30,
             },
         ],
-        "models": [
+        "models": models or [
             {"model_id": "li_tcn", "head_type": "linear", "family": "baseline", "priority": 1},
         ],
     }
@@ -190,6 +191,81 @@ def test_sanity_train_rejects_when_li_tcn_point_mixed_030_missing(tmp_path):
 
     with pytest.raises(ValueError, match="exactly one li_tcn"):
         runner.run_sanity_train(epochs=2, provider_factory=_factory)
+
+
+def test_run_sanity_train_selects_requested_model_and_isolates_output(tmp_path):
+    """model_id selects the sanity spec; only that model's sanity dir is written."""
+
+    models = [
+        {"model_id": "li_tcn", "head_type": "linear", "family": "baseline", "priority": 1},
+        {"model_id": "gru_d", "head_type": "linear", "family": "baseline", "priority": 2},
+    ]
+    runner = PilotRunner(
+        [_sanity_matrix(tmp_path, models=models)], tmp_path / "result", profile="metropt3"
+    )
+    gru_d_key = "metropt3_chrono_502030_v2|point|gru_d|linear|point_mixed_030|2026"
+    li_tcn_key = "metropt3_chrono_502030_v2|point|li_tcn|linear|point_mixed_030|2026"
+
+    manifest = runner.run_sanity_train(epochs=2, provider_factory=_factory, model_id="gru_d")
+
+    assert manifest["model_id"] == "gru_d"
+    assert manifest["run_id"] == gru_d_key
+    assert manifest["sanity_epochs"] == 2
+    assert manifest["test_evaluation_count"] == 0
+    sanity_root = tmp_path / "result" / "pilot" / "metropt3" / "sanity"
+    assert (sanity_root / gru_d_key / "manifest.json").is_file()
+    assert (sanity_root / gru_d_key / "history.json").is_file()
+    # The default gate model is untouched unless explicitly requested.
+    assert not (sanity_root / li_tcn_key).exists()
+
+
+def test_run_sanity_train_rejects_when_requested_model_missing(tmp_path):
+    models = [{"model_id": "li_tcn", "head_type": "linear", "family": "baseline", "priority": 1}]
+    runner = PilotRunner(
+        [_sanity_matrix(tmp_path, models=models)], tmp_path / "result", profile="metropt3"
+    )
+
+    with pytest.raises(ValueError, match="exactly one ode_rnn"):
+        runner.run_sanity_train(epochs=2, provider_factory=_factory, model_id="ode_rnn")
+
+
+def test_cli_sanity_mode_honors_model_ids_and_gate_flags(tmp_path, monkeypatch, capsys):
+    """--model-id reaches run_sanity_train per model; a failed gate flag exits 1."""
+
+    import run_pilot_matrix as cli
+
+    calls = []
+
+    class _FakeRunner:
+        def __init__(self, **kwargs):
+            pass
+
+        def run_sanity_train(self, epochs, model_id):
+            calls.append((epochs, model_id))
+            return {
+                "run_id": f"sanity|{model_id}",
+                "finite": True,
+                "updated": True,
+                # The second model fails the gate on purpose.
+                "validation_improved": model_id != "ode_rnn",
+            }
+
+    monkeypatch.setattr(cli, "PilotRunner", _FakeRunner)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_pilot_matrix.py", "--profile", "metropt3", "--matrix", "point",
+            "--mode", "sanity", "--model-id", "li_tcn", "--model-id", "ode_rnn",
+            "--epochs", "5",
+        ],
+    )
+
+    assert cli.main() == 1
+    assert calls == [(5, "li_tcn"), (5, "ode_rnn")]
+    printed = capsys.readouterr().out
+    assert "sanity|li_tcn" in printed
+    assert "sanity|ode_rnn" in printed
 
 
 def test_naive_floor_reference_reads_data_gate_when_present(tmp_path):
