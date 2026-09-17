@@ -832,3 +832,24 @@
 - Verification run：修复前全量 313 passed；修复后全量 314 passed（含新红→绿测试）；49-key dry-run；portability 5 passed；跨机 `compare_reports` 通过。
 - Review result：T01 验收六项通过；规范身份 split=`eb7b957c` 内部自洽（data gate / smoke 指纹 / preflight 三方一致）。
 - Remaining risk：`float_precision="round_trip"` 未覆盖除 MetroPT 外的其它 CSV 读取路径（C-MAPSS/TEP 未纳入本轮协议身份链）；T02 短训练、Phase S03 未执行。
+
+## 2026-09-17 CH34-S03-T02 LI+TCN validation-only 短训练与 Phase CH34-S03 闭合
+
+- 阶段：S4 Reconstruction / CH34-S03 AutoDL 环境预检与中心条件学习门禁；本条目完成 T02 并关闭 Phase CH34-S03。
+- 实现：新增 `pilot_sanity_train`（5-epoch train/valid，不接触 test）与 `PilotRunner.run_sanity_train`（选 point li_tcn@point_mixed_030，独立目录 `sanity/`，manifest `run_level=sanity_train` + `test_evaluation_count=0`，不写 prediction/checkpoint）；CLI 增加 `--mode sanity --epochs`。4 项新测试。
+- 执行：AutoDL GPU（device=cuda）跑 `--mode sanity --epochs 5`，产物 `result/pilot/metropt3/sanity/`。
+- 验收结果：`finite=true`、`updated=true`、`validation_improved=true`；init_valid_mae 0.9996 → best_valid_mae 0.3986（epoch 5）；train_loss 0.50→0.22 单调下降，valid 无过拟合；test_evaluation_count=0；协议 split_sha256=`eb7b957c…` 与 T01 一致。
+- naive floor 比较：best_valid_mae 0.3986（raw 掩蔽位置）< data_gate persistence raw 0.9159（valid 全 query 位置），beat_naive=true，改善 56.5%。AutoDL manifest 中 `naive_floor.available=false`/`beat_naive=null` 系 `data_gate.json` 为本机诊断产物未同步所致；判定已在本机用 `result/pilot/metropt3/diagnostics/data_gate.json` 核对为 true。
+- 固定优化器/预算：AdamW lr=1e-3 weight_decay=1e-4、5 epoch、batch 128；本轮无 lr sweep、无模型特异调参。
+- 结论：中心条件 MetroPT 协议可学习（5 epoch 内 li_tcn 即超越 best naive persistence 56.5%），学习门禁通过，可进入 CH3-S04 第三章 baseline。Phase CH34-S03 勾选。
+
+### Capability-use audit
+
+- Required skills：executing-plans、verification、verification-before-completion、debugging。
+- Skills actually used：新增 sanity trainer + 独立目录隔离 + CLI 入口 + 红→绿测试；本机 CPU epochs=1 端到端 wiring 预验证后 AutoDL GPU 正式 5-epoch。
+- Inputs consumed：T02 合同、pilot_train_and_evaluate/_train_one_epoch/_valid_score、data_gate.json floors、AutoDL GPU 环境。
+- Inputs not used and why：未访问 test target；未写 checkpoint/prediction；未做 lr sweep。
+- Artifacts produced：`pilot_sanity_train`/`run_sanity_train`、`--mode sanity --epochs`、`test_pilot_sanity_train.py`（4 项）、AutoDL sanity manifest/history。
+- Verification run：本机全量 318 passed（含 4 新测试）；49-key dry-run 不变；本机 CPU epochs=1 wiring 通过（三标志 true、beat_naive true）；AutoDL GPU epochs=5 正式通过。
+- Review result：T02 验收三项通过；Phase CH34-S03 闭合（T01+T02）。
+- Remaining risk：`data_gate.json` 尚未同步到 AutoDL（进入 CH3-S04 前建议作为环境准备 scp/生成，使 sanity/正式 run 的 naive floor 比较自包含）；CH3-S04 及后续 Phase 未执行。

@@ -2929,7 +2929,7 @@ class WindowSufficientStats:
 
 ### CH34-S03：AutoDL 环境预检与中心条件学习门禁
 
-- [ ] **Phase CH34-S03 完成：同一 clean commit 在 AutoDL 通过数据、设备和 validation-only 学习门禁**
+- [x] **Phase CH34-S03 完成：同一 clean commit 在 AutoDL 通过数据、设备和 validation-only 学习门禁**（T01 跨机身份一致 + GPU smoke pass；T02 LI+TCN 5-epoch sanity 三标志 finite/updated/validation_improved 全 true、beat_naive true。中心条件 MetroPT 协议可学习，可进入 CH3-S04 第三章 baseline）
 
 #### Task CH34-S03-T01：冻结版本并核对跨机身份
 
@@ -2948,13 +2948,15 @@ class WindowSufficientStats:
 
 #### Task CH34-S03-T02：执行 LI+TCN validation-only 短训练
 
-- [ ] 只在 `mixed@0.30` 上运行 LI+TCN 的 5-epoch train/validation sanity，不访问 test target。
-- [ ] 保存 `run_level=sanity_train`，与完整 pilot key/目录隔离，不能被 resume 当作完整结果。
-- [ ] 检查 loss 有限、参数发生更新、validation MAE 至少一次优于初始化模型，并与 data gate 的 history-only floor 比较。
-- [ ] 若 learned model 完全不优于 best naive floor，则停止后续 GPU 调度，进入数据/优化诊断；不得为了过门禁读取 test。
-- [ ] 若通过，登记固定优化器和训练预算；本轮不进行 learning-rate sweep 或模型特异调参。
+- [x] 只在 `mixed@0.30` 上运行 LI+TCN 的 5-epoch train/validation sanity，不访问 test target。（AutoDL GPU，device=cuda，sanity_epochs=5，test_evaluation_count=0）
+- [x] 保存 `run_level=sanity_train`，与完整 pilot key/目录隔离，不能被 resume 当作完整结果。（独立目录 `result/pilot/metropt3/sanity/`，非 `runs/`，resume 不扫描）
+- [x] 检查 loss 有限、参数发生更新、validation MAE 至少一次优于初始化模型，并与 data gate 的 history-only floor 比较。（finite=true、updated=true、validation_improved=true：init_valid_mae 0.9996 → best_valid_mae 0.3986；beat_naive=true，本机 data_gate 核对 0.3986 < persistence raw 0.9159，改善 56.5%）
+- [x] 若 learned model 完全不优于 best naive floor，则停止后续 GPU 调度，进入数据/优化诊断；不得为了过门禁读取 test。（不触发：best 0.3986 显著优于 best naive floor persistence 0.9159）
+- [x] 若通过，登记固定优化器和训练预算；本轮不进行 learning-rate sweep 或模型特异调参。（固定 AdamW lr=1e-3 weight_decay=1e-4，5 epoch，batch 128）
 
-**验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。
+**验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。 ✅
+
+**执行注记：** 训练曲线健康（train_loss 0.50→0.22 单调下降；valid 0.9996→0.3986，epoch 3 轻微波动后恢复，无过拟合）。`naive_floor.available=false` 与 `beat_naive=null` 出现在 AutoDL manifest 是因为 `data_gate.json` 为本机诊断产物（`result/` 不进 git、未同步到 AutoDL）；beat_naive 判定已在本机用 `result/pilot/metropt3/diagnostics/data_gate.json` 核对为 true。协议身份 split_sha256=`eb7b957c…` 与 T01 跨机一致。
 
 ---
 
