@@ -83,7 +83,14 @@ def load_metropt_frame(data_dir: Path) -> pd.DataFrame:
     if cache_key in _METROPT_FRAME_CACHE:
         return _METROPT_FRAME_CACHE[cache_key].copy()
 
-    frame = pd.read_csv(csv_path, index_col=0, parse_dates=["timestamp"])
+    # Same canonical float parse as load_metropt_frame_v2: keeps v1/v2 loads
+    # byte-identical for the same CSV regardless of the pandas build.
+    frame = pd.read_csv(
+        csv_path,
+        index_col=0,
+        parse_dates=["timestamp"],
+        float_precision="round_trip",
+    )
     frame = frame.sort_values("timestamp").reset_index(drop=True)
     missing = [col for col in METROPT_SENSOR_COLUMNS if col not in frame.columns]
     if missing:
@@ -252,7 +259,14 @@ def load_metropt_frame_v2(data_dir) -> pd.DataFrame:
     path = Path(data_dir) / CSV_NAME
     if not path.exists():
         raise FileNotFoundError(path)
-    frame = pd.read_csv(path, parse_dates=["timestamp"])
+    # float_precision="round_trip" pins the correctly-rounded decimal->binary
+    # conversion: the default xstrtod path is allowed ~1 ULP error and its
+    # result differs between pandas builds (macOS arm64 vs linux x86_64),
+    # which silently made raw_data_sha and every chained protocol SHA
+    # machine-dependent (found by the CH34-S03-T01 cross-machine preflight).
+    frame = pd.read_csv(
+        path, parse_dates=["timestamp"], float_precision="round_trip"
+    )
     if "Unnamed: 0" in frame.columns:
         sourceless = frame.rename(columns={"Unnamed: 0": "source_row_id"})
     elif "source_row_id" in frame.columns:

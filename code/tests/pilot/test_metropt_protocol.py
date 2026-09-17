@@ -477,3 +477,35 @@ def test_window_catalog_sha_covers_every_record_not_just_ends():
     tampered = list(records)
     tampered[middle] = replace(tampered[middle], start=tampered[middle].start + 1)
     assert window_catalog_sha("i" * 64, 4, 2, 1, tampered) != base
+
+
+@_requires_metropt
+def test_v2_loader_float_parse_is_platform_independent():
+    """CH34-S03-T01 drift fix: CSV floats must parse via round_trip.
+
+    The default pandas C-parser float conversion (xstrtod) is allowed ~1 ULP
+    error and its result varies between builds (macOS arm64 vs linux x86_64
+    diverged on all 7 continuous channels), which made ``raw_data_sha`` — and
+    every SHA chained from it — machine-dependent while statistics stayed
+    identical. The loader must use the correctly-rounded parser so the same
+    CSV bytes hash identically on every machine.
+    """
+    from kaf_profiti.industrial.metropt import (
+        METROPT_BINARY_CONTEXT_COLUMNS,
+        METROPT_CONTINUOUS_COLUMNS,
+    )
+
+    frame = load_metropt_frame_v2(_METROPT_CSV.parent)
+    reference = pd.read_csv(
+        _METROPT_CSV, parse_dates=["timestamp"], float_precision="round_trip"
+    )
+    reference = (
+        reference.rename(columns={"Unnamed: 0": "source_row_id"})
+        .sort_values(["timestamp", "source_row_id"])
+        .reset_index(drop=True)
+    )
+    columns = METROPT_CONTINUOUS_COLUMNS + METROPT_BINARY_CONTEXT_COLUMNS
+    assert list(frame["source_row_id"]) == list(reference["source_row_id"])
+    assert np.asarray(frame[columns], dtype=np.float64).tobytes() == np.asarray(
+        reference[columns], dtype=np.float64
+    ).tobytes()
