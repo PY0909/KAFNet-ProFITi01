@@ -46,7 +46,7 @@
   - `compare_code/probabilistic_baselines/`：PatchTST、ODE-RNN、GraFITi、ProFITi、KAFNet 等基线入口。
 - `dataset/`：数据集原始文件（CMAPSSData、metropt+3+dataset）。
 - `result/`：每次实验的完整保存（metrics、checkpoints、predictions、calibration、history）。
-- `plan/`：进度跟踪、结构蓝图、证据映射、任务分包、30天推进计划。
+- `plan/`：进度跟踪、结构蓝图、证据映射与实施计划。
 - `refs/`：外部参考资料。
 - `图/`：论文插图。
 - `文献阅读.md`：文献综述正文（65条引用，已重写为正式综述结构）。
@@ -62,7 +62,7 @@
 ## 4. 默认工作流
 
 1. 先判断任务类型：`writing（论文写作）/ experiment（实验）/ review（审查）/ lit（文献）/ plan（规划）/ fix（修复）`。
-2. 先读 `AGENTS.md`、`plan/30天推进计划.md` 和相关文档，再动手。
+2. 先读 `AGENTS.md`、`plan/implementation-plan.md` 和相关文档，再动手。
 3. 识别改动边界：
    - 论文正文（文献阅读.md 或章节日后创建的文件）→ 引用一致性 + 术语统一
    - 实验代码（code/ 或 compare_code/）→ 不影响已有模型注册 + 测试不退化
@@ -355,7 +355,7 @@ python -m pytest code/tests/test_experiment_framework.py -q
 
 ## 8. 文档治理
 
-- 规划入口：`plan/30天推进计划.md`。
+- 规划入口：`plan/implementation-plan.md`。
 - 进度跟踪：`plan/progress.md`。
 - 结构蓝图：`plan/chapter-blueprints/`。
 - 文献总表：`文献汇总表.md`（66条，含DOI、核验状态、阅读优先级）。

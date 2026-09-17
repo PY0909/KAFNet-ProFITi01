@@ -24,9 +24,15 @@ _DATA_ROOT = Path(__import__("os").environ.get("KST_DATA_ROOT", _REPO_ROOT / "da
 _FD004_READY = (_DATA_ROOT / "CMAPSSData" / "train_FD004.txt").exists() and (
     _DATA_ROOT / "CMAPSSData" / "test_FD004.txt"
 ).exists()
+_METROPT_READY = (
+    _DATA_ROOT / "metropt+3+dataset" / "MetroPT3(AirCompressor).csv"
+).exists()
 
 _requires_fd004 = pytest.mark.skipif(
     not _FD004_READY, reason="FD004 raw files not available under KST_DATA_ROOT"
+)
+_requires_metropt = pytest.mark.skipif(
+    not _METROPT_READY, reason="MetroPT raw file not available under KST_DATA_ROOT"
 )
 
 
@@ -36,6 +42,7 @@ def _build_report(**kwargs):
         data_root=_DATA_ROOT,
         result_root=kwargs.pop("result_root", _REPO_ROOT / "result"),
         environment=kwargs.pop("environment", "local"),
+        profile=kwargs.pop("profile", "fd004"),
         **kwargs,
     )
 
@@ -43,7 +50,8 @@ def _build_report(**kwargs):
 def test_report_records_git_dataset_matrices_protocol_and_code_identity():
     report = _build_report()
 
-    assert report["schema"] == "pilot-environment-preflight-v1"
+    assert report["schema"] == "pilot-environment-preflight-v2"
+    assert report["profile"] == "fd004"
     assert len(report["git"]["commit_sha"]) == 40
     assert isinstance(report["git"]["clean"], bool)
 
@@ -60,6 +68,36 @@ def test_report_records_git_dataset_matrices_protocol_and_code_identity():
     assert report["dependencies"]["torch"], "torch version must be recorded"
     assert report["python"]["version"]
     assert "free_gb" in report["disk"]
+
+
+@_requires_metropt
+def test_metropt_report_records_raw_matrix_and_full_protocol_identity(tmp_path):
+    report = _build_report(profile="metropt3", result_root=tmp_path / "result")
+
+    raw = report["dataset"]["files"][
+        "metropt+3+dataset/MetroPT3(AirCompressor).csv"
+    ]
+    assert len(raw["sha256"]) == 64 and raw["bytes"] > 0
+    assert report["matrices"]["point_matrix"] == check_pilot_environment.matrix_sha256(
+        _REPO_ROOT / "configs" / "pilot" / "metropt3" / "point_matrix.yaml"
+    )
+    identity = report["protocol"]["dataset_identity"]
+    for field in (
+        "raw_data_sha256",
+        "partition_sha256",
+        "timeline_sha256",
+        "window_catalog_sha256",
+        "normalization_sha256",
+        "time_scale_sha256",
+        "target_schema_sha256",
+        "evaluator",
+    ):
+        assert identity[field]
+    assert set(report["protocol"]["realized_rate"]) == {"train", "valid", "test"}
+    bundles = report["protocol"]["mask_bundles"]
+    assert len(bundles) == 3
+    assert all("_mixed_0.30_seed2026.npz" in path for path in bundles)
+    assert sorted(bundles.values()) == sorted(report["protocol"]["mask_sha"].values())
 
 
 def test_protocol_mask_bundles_are_recorded_when_present():
@@ -111,6 +149,23 @@ def test_compare_flags_identity_drift():
     with pytest.raises(AssertionError, match="train_FD004"):
         check_pilot_environment.compare_reports(report, drifted)
 
+    drifted = copy.deepcopy(report)
+    drifted["profile"] = "metropt3"
+    with pytest.raises(AssertionError, match="profile"):
+        check_pilot_environment.compare_reports(report, drifted)
+
+    metro_identity = {
+        "dataset_identity": {"time_scale_sha256": "a" * 64},
+        "mask_bundles": {},
+    }
+    local = copy.deepcopy(report)
+    remote = copy.deepcopy(report)
+    local["protocol"] = copy.deepcopy(metro_identity)
+    remote["protocol"] = copy.deepcopy(metro_identity)
+    remote["protocol"]["dataset_identity"]["time_scale_sha256"] = "b" * 64
+    with pytest.raises(AssertionError, match="time_scale_sha256"):
+        check_pilot_environment.compare_reports(local, remote)
+
 
 @_requires_fd004
 def test_single_batch_smoke_verifies_device_link_without_test_metrics(tmp_path):
@@ -131,6 +186,20 @@ def test_single_batch_smoke_verifies_device_link_without_test_metrics(tmp_path):
     assert all("/v3_" in relative for relative in bundles)
 
 
+@_requires_metropt
+def test_metropt_single_batch_smoke_uses_center_condition_without_test_metrics(tmp_path):
+    smoke = check_pilot_environment.single_batch_smoke(
+        _REPO_ROOT, _DATA_ROOT, tmp_path / "result", profile="metropt3"
+    )
+
+    assert smoke["model_id"] == "li_tcn"
+    assert smoke["condition_id"] == "point_mixed_030"
+    assert smoke["mechanism"] == "mixed"
+    assert smoke["requested_rate"] == pytest.approx(0.30)
+    assert smoke["test_metric_count"] == 0
+    assert smoke["ok"] is True
+
+
 @_requires_fd004
 def test_cli_writes_parseable_preflight_report(tmp_path):
     output_dir = tmp_path / "environment"
@@ -148,5 +217,26 @@ def test_cli_writes_parseable_preflight_report(tmp_path):
     assert completed.returncode == 0, completed.stderr[-2000:]
 
     report = json.loads((output_dir / "local-preflight.json").read_text(encoding="utf-8"))
-    assert report["schema"] == "pilot-environment-preflight-v1"
+    assert report["schema"] == "pilot-environment-preflight-v2"
     assert report["git"]["commit_sha"]
+
+
+@_requires_metropt
+def test_cli_profile_metropt_writes_profile_report(tmp_path):
+    output_dir = tmp_path / "environment"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(_REPO_ROOT / "code" / "check_pilot_environment.py"),
+            "--profile", "metropt3",
+            "--environment", "local",
+            "--output-dir", str(output_dir),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=_REPO_ROOT,
+    )
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    report = json.loads((output_dir / "local-preflight.json").read_text(encoding="utf-8"))
+    assert report["profile"] == "metropt3"
+    assert report["protocol"]["dataset_identity"]["raw_data_sha256"]

@@ -71,6 +71,7 @@ class MetroPTWindowSample:
     context: Tensor
     rul: float
     unit_id: int
+    window_id: str = ""
 
 
 def load_metropt_frame(data_dir: Path) -> pd.DataFrame:
@@ -588,6 +589,7 @@ class MetroPTChronoDataset(Dataset):
             context=context,
             rul=self._risk(fut),
             unit_id=0,
+            window_id=record.window_id,
         )
 
     def _real_time(self, segment, record):

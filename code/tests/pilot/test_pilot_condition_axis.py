@@ -58,8 +58,7 @@ def _tiny_matrix(tmp_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Provider factory wiring: full runs follow the spec, smoke pins the main
-# condition
+# Provider factory wiring: full and smoke runs follow their selected specs.
 # ---------------------------------------------------------------------------
 
 
@@ -88,15 +87,15 @@ def test_full_run_provider_uses_spec_condition(monkeypatch, tmp_path):
     assert recorded["requested_rate"] == spec.target_missing_rate
 
 
-def test_smoke_provider_pins_main_condition(monkeypatch, tmp_path):
+def test_smoke_provider_uses_selected_matrix_condition(monkeypatch, tmp_path):
     recorded = _record_factory(monkeypatch)
     matrix = load_matrix(_tiny_matrix(tmp_path))
     spec = PilotRunner(matrices=[matrix], result_root=tmp_path / "result").expand()[0]
 
     _build_smoke_provider(spec, tmp_path / "dataset", tmp_path / "result")
 
-    assert recorded["mechanism"] == pilot_runner.SMOKE_MAIN_MECHANISM
-    assert recorded["requested_rate"] == pilot_runner.SMOKE_MAIN_CONDITION_RATE
+    assert recorded["mechanism"] == spec.missing_mode
+    assert recorded["requested_rate"] == spec.target_missing_rate
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +273,9 @@ def test_manifest_records_protocol_sha(tmp_path):
         assert manifest["protocol_sha"]["mechanism"] == spec.missing_mode
         assert manifest["protocol_sha"]["requested_rate"] == spec.target_missing_rate
         assert manifest["protocol_sha"]["mask_sha"]["test"] == "c" * 64
+        assert manifest["run_id"] == spec.key
+        assert manifest["test_evaluation_count"] == 1
+        assert "predictions" in manifest["artifacts"]
 
 
 # ---------------------------------------------------------------------------

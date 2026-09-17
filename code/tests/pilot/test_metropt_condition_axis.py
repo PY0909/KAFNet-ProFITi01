@@ -231,3 +231,16 @@ def test_provider_fingerprint_carries_v2_schema_identity(v2_protocol, tmp_path):
     fingerprint = provider.protocol_fingerprint()
     assert fingerprint["target_schema_sha256"] == v2_protocol.split_info["target_schema_sha256"]
     assert fingerprint["evaluator"] == v2_protocol.split_info["evaluator"]
+    identity = v2_protocol.split_info["split_identity"]
+    for field in (
+        "raw_data_sha256",
+        "partition_sha256",
+        "timeline_sha256",
+        "window_catalog_sha256",
+        "time_scale_sha256",
+    ):
+        assert fingerprint[field] == identity[field]
+    assert set(fingerprint["realized_rate"]) == {"train", "valid", "test"}
+    assert all(
+        abs(rate - 0.30) <= 0.01 for rate in fingerprint["realized_rate"].values()
+    )

@@ -2837,82 +2837,91 @@ class WindowSufficientStats:
 
 ### CH34-S02：泛化 runner、矩阵与统一评价器
 
-- [ ] **Phase CH34-S02 完成：MetroPT-3 的 49 个单种子 key 可选择、可恢复、可验签**
+- [x] **Phase CH34-S02 完成：MetroPT-3 的 49 个单种子 key 可选择、可恢复、可验签**（2026-09-17 审查修复后：`--matrix all` dry-run 精确 49 唯一 key；完整 prediction artifact 已接入默认 trainer/resume；本机 14 模型 smoke 共享含 raw/partition/timeline/window/time-scale/realized-rate 的唯一协议指纹；全量 313 passed。尚未训练任何正式 run——S03 起）
 
 #### Task CH34-S02-T01：移除 runner 的 FD004 专用假设
+
+- [x] **Task CH34-S02-T01 完成：runner 已支持 profile/筛选、同范围 baseline-first gate 与严格验签 resume**（T02/T03 配置建立后已完成 MetroPT 42/7/49-key CLI 验收；2026-09-17 全量回归 313 passed）
 
 **Files：**
 - 修改：`code/run_pilot_matrix.py`
 - 修改：`code/kaf_profiti/experiments/pilot_runner.py`
 - 修改：`code/tests/pilot/test_pilot_runner.py`
 
-- [ ] 先写失败测试：`--profile metropt3` 必须从 `configs/pilot/metropt3/` 加载矩阵，并把结果写入 `pilot/metropt3/`。
-- [ ] 先写失败测试：`--family baseline|ours`、可重复 `--condition-id` 和可重复 `--model-id` 只能筛选调度范围，不能改变 scientific key 或 matrix SHA。
-- [ ] 先写失败测试：调度 ours 时，baseline-first gate 只接受同 dataset、track、condition 和 seed 的已验签 baseline manifests。
-- [ ] 将 `_PILOT_ROOT`、config dir、报告路径和 CLI 文案改为 dataset profile 驱动，不在源码中拼接 FD004。
-- [ ] resume 必须同时匹配 matrix、data、split、segment、normalization、mask、target、evaluator、code 和 checkpoint artifact SHA。
-- [ ] 运行 runner 测试；预期原 FD004 expansion 回归测试与新 MetroPT profile 测试同时通过。
+- [x] 端到端验收：`--profile metropt3` 从 `configs/pilot/metropt3/` 加载真实矩阵；point/probabilistic/all dry-run 分别展开 42/7/49 个 key，profile 结果目录固定为 `pilot/metropt3/`。
+- [x] 先写失败测试：`--family baseline|ours`、可重复 `--condition-id` 和可重复 `--model-id` 只能筛选调度范围，不能改变 scientific key 或 matrix SHA。
+- [x] 先写失败测试：调度 ours 时，baseline-first gate 只接受同 dataset、track、condition 和 seed 的已验签 baseline manifests。
+- [x] 将 `_PILOT_ROOT`、config dir、报告路径和 CLI 文案改为 dataset profile 驱动，不在源码中拼接 FD004。
+- [x] resume 必须同时匹配 matrix、data、split、segment、normalization、mask、target、evaluator、code 和 checkpoint artifact SHA。
+- [x] 完成 T01 审查整改：manifest 逐字段身份校验；artifact 名称/SHA 完全覆盖和相对路径约束；checkpoint 与完成后重验；dry-run/execute 统一 protocol 校验；custom/`**kwargs` provider 支持；按 condition 缓存；动态 smoke 条件/计数；`force-rerun` 报告语义；profile 单一真源。
+- [x] 运行 runner 测试；原 FD004 expansion 与新增 profile/filter/gate/resume/security/cache/smoke 回归共 36 passed；全量 `code/tests/` 287 passed、2 个既有 sklearn deprecation warnings。
 
 **验收：** 可以先运行中心条件，再运行剩余条件，同时完整复用同一 tracked matrix 身份。
 
 #### Task CH34-S02-T02：创建第三章点预测单种子矩阵
+
+- [x] **Task CH34-S02-T02 完成：MetroPT-3 点预测单种子矩阵创建并 dry-run 精确展开 42 个 key**（2026-09-16：point_matrix.yaml 注册 5 baseline + 2 KST-Light head × 6 条件；runner `--profile metropt3 --matrix point --mode dry-run` 精确展开 42 个唯一 key、baseline 排在 ours 前；common.yaml 锁定 MetroPT 协议；test_metropt_matrices.py 7 passed；T01 遗留的 MetroPT CLI 端到端验收框随之关闭）
 
 **Files：**
 - 创建：`configs/pilot/metropt3/common.yaml`
 - 创建：`configs/pilot/metropt3/point_matrix.yaml`
 - 测试：`code/tests/pilot/test_metropt_matrices.py`
 
-- [ ] 登记 5 个 baseline：`li_tcn`、`ff_gru`、`masked_tcn`、`gru_d`、`ode_rnn`，统一使用 MLP point head。
-- [ ] 登记本文模型 `kst_light` 的 Linear 与 MLP 两个轻量头；两者除 head 外共享 encoder、数据和训练预算。
-- [ ] 登记 6 个唯一条件：random 0/30/70、low-rate 30、block-offline 30、mixed 30；condition ID 固定为 `point_random_000`、`point_random_030`、`point_random_070`、`point_low_rate_030`、`point_block_offline_030`、`point_mixed_030`，random 30 同时属于 intensity/mechanism 两个视图。
-- [ ] 固定 `seed=2026`、168/24/60、50 epochs、batch 128；不登记 model-specific test override。
-- [ ] dry-run 断言 point key 精确为 `5*6 + 2*6 = 42`，baseline 排在 ours 前。
+- [x] 登记 5 个 baseline：`li_tcn`、`ff_gru`、`masked_tcn`、`gru_d`、`ode_rnn`，统一使用 Linear point head。
+- [x] 登记本文模型 `kst_light` 的 Linear 与 MLP 两个轻量头；两者除 head 外共享 encoder、数据和训练预算。
+- [x] 登记 6 个唯一条件：random 0/30/70、low-rate 30、block-offline 30、mixed 30；condition ID 固定为 `point_random_000`、`point_random_030`、`point_random_070`、`point_low_rate_030`、`point_block_offline_030`、`point_mixed_030`，random 30 同时属于 intensity/mechanism 两个视图。
+- [x] 固定 `seed=2026`、168/24/60、50 epochs、batch 128；不登记 model-specific test override。
+- [x] dry-run 断言 point key 精确为 `5*6 + 2*6 = 42`，baseline 排在 ours 前。
 
 **验收：** 42 个 key 的区别只来自模型、head 或预注册 history 缺失条件。
 
 #### Task CH34-S02-T03：创建第四章概率预测单种子矩阵
 
+- [x] **Task CH34-S02-T03 完成：MetroPT-3 概率预测单种子矩阵创建并 dry-run 精确展开 7 个 key**（2026-09-16：probabilistic_matrix.yaml 注册 6 baseline + `kst_probflow`，唯一中心条件 `prob_mixed_030`（mixed@0.30）；runner `--profile metropt3 --matrix probabilistic --mode dry-run` 精确 7 个唯一 key、baseline 在前 KST 最后；test_metropt_matrices.py 概率段 6 项验证通过；点/概率 49 key 无碰撞）
+
 **Files：**
 - 创建：`configs/pilot/metropt3/probabilistic_matrix.yaml`
 - 测试：`code/tests/pilot/test_metropt_matrices.py`
 
-- [ ] 登记 6 个 baseline：TCN-Gaussian、PatchTST-Gaussian、GRU-D-Gaussian、ODE-RNN-Gaussian、GraFITi-Gaussian、ProFITi。
-- [ ] 登记本文模型 `kst_probflow`，固定中心条件 `mixed@actual 0.30`。
-- [ ] 每个 adapted baseline 在 registry/manifest 保留实现身份，不得把本仓库简化实现表述为原论文官方实现。
-- [ ] 固定 `seed=2026`、168/24/60、50 epochs、batch 128、95% interval、`nsamples=100`。
-- [ ] dry-run 断言 probabilistic key 精确为 `6+1=7`，六个 baseline 全部排在 KST ProbFlow 前。
+- [x] 登记 6 个 baseline：TCN-Gaussian、PatchTST-Gaussian、GRU-D-Gaussian、ODE-RNN-Gaussian、GraFITi-Gaussian、ProFITi。
+- [x] 登记本文模型 `kst_probflow`，固定中心条件 `prob_mixed_030`（mixed@0.30）。
+- [x] 每个 adapted baseline 在 registry/manifest 保留实现身份，不得把本仓库简化实现表述为原论文官方实现。
+- [x] 固定 `seed=2026`、168/24/60、50 epochs、batch 128；矩阵声明 `interval_level=0.95` 与 `nsamples=100`，其运行时生效由 T04 统一指标/artifact schema 承载。
+- [x] dry-run 断言 probabilistic key 精确为 `6+1=7`，六个 baseline 全部排在 KST ProbFlow 前。
 
 **验收：** 第四章概率比较只有 7 个唯一 source run，不复制第三章点预测结果冒充概率结果。
 
 #### Task CH34-S02-T04：补齐统一指标与 artifact schema
 
-**Files：**
+- [x] **Task CH34-S02-T04 完成：统一 evaluator 已接入真实 runner，正式 run 产物可从 prediction artifact 复算**（2026-09-17 审查修复：point/probabilistic 默认 trainer 均生成完整 payload；manifest 强制 prediction artifact 与 `test_evaluation_count=1`；逐通道标准化/物理单位指标、概率贡献、三次推理计时和参数量由同一 payload 复算）
 - 修改：`code/kaf_profiti/experiments/evaluator.py`
 - 修改：`code/kaf_profiti/experiments/pilot_runner.py`
 - 创建：`code/tests/pilot/test_metropt_evaluator.py`
 
-- [ ] 先写失败测试：MAE/RMSE 由全局 error sum/count 计算，结果不随 batch size 改变。
-- [ ] 先写失败测试：NLL/CRPS/PICP/MPIW 使用同一 distribution sample/interval，invalid target 不进入分母。
-- [ ] 保存标准化全局指标、逐通道标准化指标和逐通道物理单位指标；物理单位指标不得合成一个总分。
-- [ ] 保存完整 prediction、target、mask、window ID、checkpoint、history、timing raw repeats 和相对路径 manifest。
-- [ ] manifest 必须含 `run_id`/scientific key、seed、dataset、model、condition、实际缺失率、全部公平性 SHA 和 `test_evaluation_count=1`。
-- [ ] 运行 evaluator 测试与 artifact round-trip；预期 batch-size invariance 和内容 SHA 全部通过。
+- [x] 先写失败测试：MAE/RMSE 由全局 error sum/count 计算，结果不随 batch size 改变。
+- [x] 先写失败测试：NLL/CRPS/PICP/MPIW 使用同一 distribution sample/interval，invalid target 不进入分母。
+- [x] 保存标准化全局指标、逐通道标准化指标和逐通道物理单位指标；物理误差只逐通道报告，不跨单位聚合。
+- [x] 保存完整 prediction、target、mask、window ID、checkpoint、history、概率区间、逐窗口 NLL/CRPS 贡献、timing raw repeats 和相对路径 manifest；默认 trainer 与 resume 验签均要求 prediction artifact。
+- [x] manifest 必须含 `run_id`/scientific key、seed、dataset、model、condition、实际缺失率、全部公平性 SHA 和 `test_evaluation_count=1`。
+- [x] 运行 evaluator 测试与 artifact round-trip；T04 专项 5 passed，全量 305 passed。
 
 **验收：** 第三、四章的每个报告数字都可从 prediction artifact 独立重算。
 
 #### Task CH34-S02-T05：执行本机全模型 smoke
 
-**Files：**
-- 修改：`code/tests/pilot/test_point_baseline_fidelity.py`
-- 修改：`code/tests/pilot/test_probabilistic_baseline_fidelity.py`
-- 输出：`result/pilot/metropt3/smoke/`
+- [x] **Task CH34-S02-T05 完成：本机 14 个模型 smoke 全部通过且共享同一协议指纹**（2026-09-17 审查后重跑：point_baselines ready=5、probabilistic_baselines ready=6、ours ready=3，全部 failed=0、test_metrics=0；14 entry 完整协议指纹唯一且与 S01 split SHA 一致；全量 313 passed；portability 与 `git diff --check` 通过）
 
-- [ ] 先运行全部单元测试：`python -m pytest code/tests/ -q`；预期零失败。
-- [ ] 对 5 个点 baseline 运行一个 train batch、一个 validation batch和一个 feature-only test batch；预期 `ready=5, failed=0, test_metrics=0`。
-- [ ] 对 6 个概率 baseline 运行 forward/NLL/backward/sample/checkpoint round-trip；预期 `ready=6, failed=0, test_metrics=0`。
-- [ ] baseline smoke 全部通过后，再运行 KST-Light 两个 head 和 KST ProbFlow；预期 `ready=3, failed=0, test_metrics=0`。
-- [ ] 比较 14 个 smoke entry 的 split/segment/normalization/center-mask/target/evaluator SHA；预期完全一致。
-- [ ] 运行 portability scan 与 `git diff --check`；预期零固定路径、主机、账号、端口或 URL 命中。
+**Files：**
+- 修改：`code/tests/pilot/test_point_baseline_fidelity.py`（未修改：数据集无关合成合同测试，MetroPT 真实维度由 runner 级 smoke 覆盖）
+- 修改：`code/tests/pilot/test_probabilistic_baseline_fidelity.py`（未修改：同上）
+- 输出：`result/pilot/metropt3/smoke/`（三个报告已生成）
+
+- [x] 先运行全部单元测试：`python -m pytest code/tests/ -q`；预期零失败。（305 passed, 2 warnings）
+- [x] 对 5 个点 baseline 运行一个 train batch、一个 validation batch和一个 feature-only test batch；预期 `ready=5, failed=0, test_metrics=0`。
+- [x] 对 6 个概率 baseline 运行 forward/NLL/backward/sample/checkpoint round-trip；预期 `ready=6, failed=0, test_metrics=0`。
+- [x] baseline smoke 全部通过后，再运行 KST-Light 两个 head 和 KST ProbFlow；预期 `ready=3, failed=0, test_metrics=0`。
+- [x] 比较 14 个 smoke entry 的 split/segment/normalization/center-mask/target/evaluator SHA；预期完全一致。（唯一指纹，split_sha256=90650166… 与 data_gate 一致）
+- [x] 运行 portability scan 与 `git diff --check`；预期零固定路径、主机、账号、端口或 URL 命中。
 
 **验收：** 本机只证明代码和接口可运行，smoke 指标不得进入任何模型排序。
 
@@ -2924,11 +2933,14 @@ class WindowSufficientStats:
 
 #### Task CH34-S03-T01：冻结版本并核对跨机身份
 
-- [ ] 本机测试、data gate、dry-run 和 smoke 全部通过后形成 clean commit；记录 Git SHA 与依赖摘要。
-- [ ] AutoDL 只拉取该 commit，不直接编辑 checkout；数据根、结果根和缓存根只通过环境变量设置。
-- [ ] 比较 MetroPT 原始文件、matrix、split、segment、normalization、mask、target、evaluator 和 code SHA。
-- [ ] 记录 GPU、CUDA、PyTorch、可用显存与磁盘；路径值只写环境报告，不写 tracked 配置。
-- [ ] 使用一个 baseline 的单 batch CUDA smoke 验证设备链路，禁止计算 test metric。
+- [ ] 完成 S02 审查修复、本机全量测试、data gate、49-key dry-run、14-entry smoke 与 portability 检查；只暂存允许的代码、配置、测试和计划文档，形成 clean commit 并记录 Git SHA。
+- [ ] 在该 clean commit 上运行 `--profile metropt3 --require-clean` 生成本机 v2 preflight；不得在 commit 前生成报告并把旧 SHA 当作冻结证据。
+- [ ] profile-aware checker 从实际 MetroPT CSV 重算 raw/partition/timeline/window/normalization/time-scale/target/evaluator 身份，并为中心 `mixed@0.30` 生成 mask 身份；不得依赖未同步的本机 `data_gate.json`。
+- [ ] AutoDL 只 checkout 同一 commit，不直接编辑 checkout；数据根、结果根和缓存根只通过环境变量设置，且 `git status --porcelain` 必须为空。
+- [ ] 在 AutoDL 运行 `--profile metropt3 --require-clean --require-gpu --smoke`；只执行 LI+TCN 中心条件单 batch CUDA 更新，`test_metric_count=0`。
+- [ ] 比较 local/AutoDL v2 reports：Git commit、MetroPT raw data、两矩阵、split/partition/timeline/window、normalization、time-scale、mask、target、evaluator 和 code SHA 必须一致；路径、环境名和硬件字段不参与身份相等判断。
+- [ ] 记录 GPU、CUDA、PyTorch、可用显存、磁盘、报告相对路径与报告文件 SHA；不修改或纳入遗留根目录 `autodl-preflight.json`。
+- [ ] 只有 clean=true、identity sections match 且 GPU smoke 通过后才勾选本 Task；T02 的 5-epoch validation-only 训练和 CH34-S03 Phase 保持未完成。
 
 **验收：** scientific identity 完全一致且 AutoDL checkout clean，才能开始短训练。
 

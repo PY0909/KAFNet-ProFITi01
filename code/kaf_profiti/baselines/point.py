@@ -501,13 +501,15 @@ _POINT_FACTORIES = {
 }
 
 
-def create_point_baseline(name: str, num_sensors: int, context_dim: int, pred_len: int, **kwargs):
-    """Instantiate a registered point baseline by its matrix ``model_id``."""
+def create_point_baseline(name: str, num_sensors: int, context_dim: int, pred_len: int, head_type: str = "linear", **kwargs):
+    """Instantiate a registered point baseline by its matrix ``model_id`` and ``head_type``."""
 
     try:
         factory: Callable = _POINT_FACTORIES[name]
     except KeyError as exc:
         raise KeyError(f"Unknown point baseline: {name}") from exc
+    if head_type != "linear":
+        raise ValueError(f"Point baseline {name} only supports head_type='linear'")
     return factory(
         num_sensors=num_sensors, context_dim=context_dim, pred_len=pred_len, **kwargs
     )

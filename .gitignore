@@ -41,3 +41,6 @@ nohup.out
 .codegraph/
 .cursor/
 .workbuddy/
+
+# Legacy local-only preflight artifact (reports now live under result/).
+/autodl-preflight.json

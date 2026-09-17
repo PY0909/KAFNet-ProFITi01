@@ -282,7 +282,13 @@ def test_v2_targets_and_context_shapes():
     assert sample.M_q.shape == (2, 7)
     assert sample.context.shape == (8,)
     assert sample.unit_id == 0
+    assert sample.window_id == ds.window_ids[0]
     assert sample.T_obs.numel() == 4 and sample.T_q.numel() == 2
+
+    from kaf_profiti.industrial.batch import IndustrialCollator
+
+    batch = IndustrialCollator()([sample, ds[1]])
+    assert batch.window_id == ds.window_ids[:2]
 
 
 def test_v2_context_is_last_history_observation_and_binary():

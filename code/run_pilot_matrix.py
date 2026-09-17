@@ -1,16 +1,14 @@
 #!/usr/bin/env python
-"""CLI for the unified FD004 pilot matrix runner (CH2.5-P03-T01).
+"""CLI for the dataset-profile pilot matrix runner.
 
 Modes:
   dry-run  ordered scientific keys, model order, shared artifact SHAs,
            expected new-training count (default; writes nothing)
-  smoke    one-batch per-model validation for a group, validated report under
-           ``<result-root>/pilot/fd004/smoke/``; never produces test metrics
-  full     full train/validation/test pilot runs (P04; baseline-first gate on)
+  smoke    one-batch per-model validation for a group; never produces test metrics
+  full     full train/validation/test pilot runs with baseline-first gating
 
 All roots resolve through ``resolve_runtime_paths`` (CLI flag, then
-``KST_DATA_ROOT``/``KST_RESULT_ROOT``, then repository-relative defaults); no
-machine-specific path, host, port, or account is ever hardcoded here.
+``KST_DATA_ROOT``/``KST_RESULT_ROOT``, then repository-relative defaults).
 """
 
 import argparse
@@ -21,6 +19,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from kaf_profiti.experiments.pilot_runner import (  # noqa: E402
+    PROFILE_DATASETS,
+    SMOKE_GROUPS,
     PilotRunner,
     load_matrix,
     validate_smoke_report,
@@ -28,27 +28,37 @@ from kaf_profiti.experiments.pilot_runner import (  # noqa: E402
 from kaf_profiti.experiments.runtime_paths import resolve_runtime_paths  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_CONFIG_DIR = _REPO_ROOT / "configs" / "pilot" / "fd004"
-
-_SMOKE_EXPECTED = {
-    "point_baselines": 5,
-    "probabilistic_baselines": 6,
-    "ours": 3,
-}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Unified FD004 pilot matrix runner")
+    parser = argparse.ArgumentParser(description="Unified dataset-profile pilot matrix runner")
+    parser.add_argument("--profile", choices=tuple(PROFILE_DATASETS), default="fd004")
     parser.add_argument("--mode", choices=("dry-run", "smoke", "full"), default="dry-run")
     parser.add_argument("--matrix", choices=("point", "probabilistic", "all"), default="all")
     parser.add_argument(
         "--group",
-        choices=tuple(_SMOKE_EXPECTED),
+        choices=tuple(SMOKE_GROUPS),
         default=None,
         help="smoke group to execute (smoke mode only)",
     )
     parser.add_argument("--data-root", default=None)
     parser.add_argument("--result-root", default=None)
+    parser.add_argument(
+        "--family", choices=("baseline", "ours"), default=None,
+        help="narrow the scheduled family; scientific keys and matrix SHA are unchanged",
+    )
+    parser.add_argument(
+        "--condition-id", action="append", default=None,
+        help="narrow to a condition (repeatable); unknown ids are rejected",
+    )
+    parser.add_argument(
+        "--model-id", action="append", default=None,
+        help="narrow to a model id (repeatable); unknown ids are rejected",
+    )
+    parser.add_argument(
+        "--force-rerun", action="store_true",
+        help="rerun scheduled runs even when their existing manifests verify",
+    )
     parser.add_argument(
         "--device",
         default="auto",
@@ -62,12 +72,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_matrices(selection: str):
+def _load_matrices(selection: str, profile: str):
+    config_dir = _REPO_ROOT / "configs" / "pilot" / profile
     paths = []
     if selection in ("point", "all"):
-        paths.append(_CONFIG_DIR / "point_matrix.yaml")
+        paths.append(config_dir / "point_matrix.yaml")
     if selection in ("probabilistic", "all"):
-        paths.append(_CONFIG_DIR / "probabilistic_matrix.yaml")
+        paths.append(config_dir / "probabilistic_matrix.yaml")
     return [load_matrix(path) for path in paths]
 
 
@@ -75,26 +86,37 @@ def main() -> int:
     args = parse_args()
     paths = resolve_runtime_paths(args.data_root, args.result_root, {})
     runner = PilotRunner(
-        matrices=_load_matrices(args.matrix),
+        matrices=_load_matrices(args.matrix, args.profile),
         result_root=str(paths.output_root),
         data_root=str(paths.data_root),
         device=args.device,
         num_workers=args.num_workers,
+        profile=args.profile,
     )
 
     if args.mode == "dry-run":
-        print(json.dumps(runner.dry_run(), ensure_ascii=False, indent=2))
+        print(json.dumps(
+            runner.dry_run(
+                family=args.family,
+                condition_ids=args.condition_id,
+                model_ids=args.model_id,
+            ), ensure_ascii=False, indent=2
+        ))
         return 0
 
     if args.mode == "smoke":
-        groups = [args.group] if args.group else list(_SMOKE_EXPECTED)
+        groups = [args.group] if args.group else [
+            group for group in SMOKE_GROUPS if runner.smoke_expected(group) > 0
+        ]
         for group in groups:
             report = runner.run_smoke(group=group)
-            counts = validate_smoke_report(report, expected_ready=_SMOKE_EXPECTED[group])
+            counts = validate_smoke_report(
+                report, expected_ready=runner.smoke_expected(group)
+            )
             print(
                 json.dumps(
                     {"event": "smoke", "group": group, **counts, "report": str(
-                        paths.output_root / "pilot" / "fd004" / "smoke" / f"{group}_smoke.json"
+                        paths.output_root / "pilot" / args.profile / "smoke" / f"{group}_smoke.json"
                     )},
                     ensure_ascii=False,
                 ),
@@ -102,7 +124,12 @@ def main() -> int:
             )
         return 0
 
-    summary = runner.execute()
+    summary = runner.execute(
+        family=args.family,
+        condition_ids=args.condition_id,
+        model_ids=args.model_id,
+        force_rerun=args.force_rerun,
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if not summary["failed"] else 1
 

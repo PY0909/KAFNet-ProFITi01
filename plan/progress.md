@@ -722,4 +722,90 @@
 - Artifacts produced: metropt_learnability 口径修正、6 条件条件轴测试、conftest 可移植、重建的 data_gate.json（58.16%）、计划 Phase S01 注记更正、本条目。
 - Verification run: 新测试先 red（per_predictor 缺失、per_channel_units 缺失、二次标准化断言）后 green（8 passed）；独立复算 56.6% 互证；全量 266 passed；portability 扫描过。
 - Review result: 规格符合性 `PASS`（对照审查 P1-1 与 P2 三条）。
-- Remaining risk: 审查预估 58.19% 与实测 58.16% 差异来自窗口全集 vs 审查抽样口径，属正常；CH34-S02-T01 按修订版（含全部审查必需项）另行实施。
+## 2026-09-16 CH34-S02-T01 runner profile 泛化收尾
+
+- 阶段：S4 Reconstruction / CH34-S02 runner 泛化；本条目仅完成 T01。
+- 范围：将 pilot runner/CLI 从 FD004 专用路径改为受控 dataset profile；加入 `--profile`、family/model/condition 调度筛选；保持 canonical scientific key 与 matrix SHA 不因筛选改变；baseline-first gate 按同 dataset、track、condition、seed 的已验签 baseline manifest 判定；resume 校验 matrix、protocol fingerprint、code、checkpoint 与 artifact 内容身份。FD004 expansion 保持兼容。
+- 实现：profile-specific result/protocol/smoke 路径；provider factory 和 smoke provider 传递 `pilot_root`；manifest 保存完整 protocol fingerprint 和 artifact SHA；无效或过期 completed manifest 不再静默复用，而是按当前身份重新执行。未创建或执行 T02/T03 MetroPT 矩阵，未修改 T04 evaluator/artifact schema，未执行 T05 全模型 smoke、GPU 训练或正式指标。
+- 修改/产物：`code/run_pilot_matrix.py`、`code/kaf_profiti/experiments/pilot_runner.py`、`code/tests/pilot/test_pilot_runner_profiles.py`，以及本计划和 `implementation-plan.md` 的 T01 记录。工作区既有 `autodl-preflight.json` 未纳入、未修改、未作为证据。
+
+### Capability-use audit
+
+- Required skills：executing-plans、test-driven-development、verification、verification-before-completion、debugging。
+- Skills actually used：按上述流程进行只读审查、失败回归修复和分层验证。
+- Inputs consumed：T01 任务合同、现有 FD004 matrix、runner/CLI、原有 runner 测试、新增 profile 测试、MetroPT S01 协议 fingerprint 接口。
+- Inputs not used and why：`configs/pilot/metropt3/` 尚不存在，属于 T02/T03，故未创建或运行 MetroPT CLI dry-run；T04 evaluator/schema、T05 smoke、AutoDL/GPU 与正式训练结果均留待后续；`autodl-preflight.json` 为既有未跟踪环境资产，不属 T01 输入。
+- Artifacts produced：profile-driven runner 改动、5 个 profile 回归测试、manifest identity/artifact 校验增强、两份计划文档记录。
+- Verification run：初始专项回归 `19 passed, 1 failed`，失败为旧 resume 测试与“stale completed manifest 必须直接报错”语义冲突；修复为 stale completed manifest 不可 verified 但可在正常执行路径重跑后，专项回归 `20 passed`。随后全量 `code/tests/` 为 `271 passed, 2 warnings`；`py_compile` 与 `git diff --check` 通过。系统 Python 无 pytest，但使用 `/opt/anaconda3/envs/kaf_profiti/bin/python` 完成验证。
+- Review result：代码级回归 PASS；T01 已勾选。Phase CH34-S02 及 T02-T05 保持未完成；未宣称 MetroPT 49 个 key 已运行或正式结果已生成。
+- Remaining risk：尚未在实际 MetroPT matrix/config 上执行 CLI、smoke 或 full；T02/T03 matrix、T04 evaluator/artifact schema、T05 本机 14-entry smoke、S03 AutoDL 门禁和后续正式训练仍未完成。后续应在真实 profile 配置创建后复核完整 protocol SHA/manifest schema 的端到端行为。
+
+## 2026-09-17 CH34-S02-T05 本机全模型 smoke 与 Phase CH34-S02 闭合
+
+- 阶段：S4 Reconstruction / CH34-S02 收尾；本条目完成 T05 并关闭 Phase CH34-S02。
+- 执行：本机对 MetroPT profile 依次运行三组 smoke——`--group point_baselines`（ready=5, failed=0, test_metrics=0）、`--group probabilistic_baselines`（ready=6, failed=0, test_metrics=0）、`--matrix all --group ours`（ready=3: kst_light linear/mlp + kst_probflow，failed=0，test_metrics=0）。三份报告写入 `result/pilot/metropt3/smoke/`；smoke 全部钉在真实中心条件 mixed@0.30，runner 级协议指纹校验通过。
+- 一致性：14 个 smoke entry 的协议指纹唯一（split_sha256=90650166… 与 CH34-S01 数据门禁一致，normalization/mask/target schema/evaluator SHA 全部相同）；`--matrix all` dry-run 精确展开 49 个唯一 key（42 point + 7 probabilistic，kst_probflow 最后），Phase 验收「可选择、可恢复、可验签」由 T01 身份链 + T02/T03 矩阵 + 本条 dry-run 共同闭合。
+- 边界：计划列出的两个 fidelity 测试文件未修改——它们是数据集无关的合成合同测试，MetroPT 真实维度（7 通道/8 context/pred_len 24/batch 128）由 runner 级 smoke 在真实数据上覆盖；smoke 指标未进入任何模型排序，也未生成正式 run。
+
+### Capability-use audit
+
+- Required skills：executing-plans、verification、verification-before-completion。
+- Skills actually used：分层 smoke 执行、跨 entry 指纹比对、全量回归与可移植性扫描。
+- Inputs consumed：T05 合同、MetroPT 三矩阵与 common 协议、runner smoke gate/报告、S01 data_gate.json 的 split SHA 参照。
+- Inputs not used and why：未运行 full 训练/GPU/AutoDL（属 S03）；smoke 指标仅作运行性证明不进入排序；`autodl-preflight.json` 未读取、未修改、未纳入。
+- Verification run：全量 `code/tests/` `305 passed, 2 warnings`；portability 测试 `3 passed`；新增路径 grep 零命中；`git diff --check` 通过；三组 smoke 计数与 `validate_smoke_report` 门禁全部符合预期。
+- Review result：T05 验收六项全部通过；Phase CH34-S02 已勾选（T01–T05 闭合）。
+- Remaining risk：smoke 只证明代码和接口可运行；零正式训练 run 已执行，49 key 的 full 训练、AutoDL 预检与中心条件学习门禁属 CH34-S03 及之后；T04 的逐通道物理单位 payload 仍需首个正式 run 才能验证。
+
+## 2026-09-16 CH34-S02-T04 统一 evaluator 与 artifact schema
+
+- 阶段：S4 Reconstruction / CH34-S02 评价与产物合同；本条目仅完成 T04 的代码级 evaluator/artifact 合同。
+- 实现：新增 `code/kaf_profiti/experiments/evaluator.py`，复用 `GlobalMetricAccumulator` 实现 batch-size invariant 的 MAE/RMSE/NLL/CRPS/PICP/MPIW 聚合、invalid target/mask 排除、可配置 central interval 和概率 sample 数；增加 prediction artifact 内容 SHA、相对路径/路径逃逸校验、manifest 构造（`run_id`、`test_evaluation_count=1`、artifact SHA、protocol SHA）。pilot runner 已把矩阵 `interval_level`/`nsamples` 纳入 `PilotRunSpec`、manifest identity、validation sampling 和 test interval calculation。
+- 测试/产物：新增 `code/tests/pilot/test_metropt_evaluator.py`（5 项）；覆盖 batch-size invariance、invalid target denominator、共享 samples/interval、artifact round-trip/content SHA、绝对路径与 `..` 拒绝。未运行训练、smoke、GPU 或正式指标；逐通道标准化/物理单位 prediction payload 的真实训练接线留后续 artifact run。
+
+### Capability-use audit
+
+- Required skills：executing-plans、test-driven-development、verification、verification-before-completion。
+- Skills actually used：复用 accumulator/metrics、先失败后修复、专项与全量回归。
+- Inputs consumed：T04 合同、`GlobalMetricAccumulator`、现有 model API、pilot manifest/path verifier、概率 matrix 的 `interval_level=0.95`/`nsamples=100` 字段。
+- Inputs not used and why：T05 smoke、GPU、正式 training/prediction results 尚未执行；真实 MetroPT run artifact 与逐通道物理单位 payload 留后续；`autodl-preflight.json` 未读取、未修改、未纳入。
+- Verification run：T04 专项测试先 `3 passed, 2 failed`（invalid denominator expectation 与 quantile interval 宽度断言），修正测试后 `5 passed`；pilot 全量 `225 passed`；全量 `code/tests/` `305 passed, 2 warnings`；`py_compile` 和 `git diff --check` 通过。
+- Review result：代码级 evaluator/artifact contract PASS；T04 完成，T05 与 CH34-S02 Phase 保持未完成。
+- Remaining risk：真实训练结果尚未生成；prediction/target/mask/window ID 的完整多通道 artifact 仍需 T05/正式运行接线；T04 尚未提供逐通道物理单位指标的实际 run payload，不能据此形成论文指标或模型排序。
+
+## 2026-09-16 CH34-S02-T03 MetroPT-3 概率预测单种子矩阵
+
+- 阶段：S4 Reconstruction / CH34-S02 矩阵建设；本条目仅完成 T03。
+- 范围：创建独立的 MetroPT-3 probabilistic matrix，固定中心条件 `prob_mixed_030`（mixed@0.30），注册 6 个 baseline 与 `kst_probflow`，不复制或复用 point source runs；所有 key 使用 `metropt3_chrono_502030_v2`、seed/split_seed/mask_seed=2026、168/24/60、50 epochs、batch 128、hidden 64。
+- 实现/边界：矩阵声明 `interval_level=0.95`、`nsamples=100`，但当前 runner 的 `_valid_score`、`_test_metrics` 和 manifest schema 尚未消费这些额外字段，故其运行时生效留给 T04；本次不宣称已执行概率采样、区间评价或正式训练。
+- 产物：`configs/pilot/metropt3/probabilistic_matrix.yaml`；扩展 `code/tests/pilot/test_metropt_matrices.py`（T02/T03 共 13 项）；T02/T03 计划记录同步更新。T01 遗留真实 MetroPT CLI 验收已由 point dry-run 关闭。
+
+### Capability-use audit
+
+- Required skills：executing-plans、test-driven-development、verification、verification-before-completion。
+- Skills actually used：矩阵 schema 复用、registry 交叉核对、测试驱动和 CLI dry-run 验证。
+- Inputs consumed：T03 合同、FD004 probabilistic matrix schema、MetroPT common/point matrix 冻结字段、概率 baseline registry/implementation identity、pilot runner key expansion。
+- Inputs not used and why：T04 evaluator/artifact schema 未完成，故未把 interval/nsamples 扩展到 runner 或指标实现；未运行 smoke、GPU、训练或正式指标；`autodl-preflight.json` 未读取、未修改、未纳入。
+- Verification run：概率矩阵专项 `13 passed`（其中 T03 新增 6 项）；CLI `--profile metropt3 --matrix probabilistic --mode dry-run` 输出 `canonical_total=7`、`expected_total=7`、`expected_new=7`，7 key 唯一且 6 baseline 在前、KST 最后；全量 `code/tests/` `300 passed, 2 warnings`。
+- Review result：矩阵 schema、模型 ID、baseline-first 顺序和 key 去重通过；T03 完成，T04/T05 与 Phase CH34-S02 保持未完成。
+- Remaining risk：`interval_level=0.95` 与 `nsamples=100` 目前是矩阵声明，尚未进入 `PilotRunSpec`/trainer/evaluator 的运行时身份与采样参数；T04 必须补齐。尚未执行任何概率 smoke/full/正式模型比较。
+
+- 阶段：S4 Reconstruction / CH34-S02-T01 审查补丁；未开始创建 T02 MetroPT 矩阵。
+- 修复：resume 现在逐字段匹配 scientific identity，并要求 `history/metrics/checkpoint` artifact 与 SHA 集合完全一致；拒绝绝对路径、`..`、跨 run 目录与 symlink 逃逸；checkpoint SHA 与 artifact SHA 双向一致。伪造、残缺或旧 schema manifest 均不可作为 resume/gate 证据。
+- 一致性：dry-run、execute、注入 adapter 和同批完成后 gate 统一走 protocol fingerprint 验签；completed run 写 manifest 后立即重验，未通过则转 failed，不能放行 ours。`force-rerun` 明确定义为重跑已验签 scheduled runs，summary 使用 `rerun_verified` 且不再同时计入 skipped。
+- 泛化：provider 按 root/profile/dataset/condition/window/seed 缓存，`**kwargs` factory 可收到 `pilot_root`；profile 映射由 runner 单一导出；smoke 从矩阵选择真实条件（优先真实存在的 mixed@0.30），空 group hard fail 且不覆盖报告，CLI expected 数量动态推导。
+- 性能：code fingerprint 使用 Python 文件元数据签名缓存内容 hash；源码元数据变化时自动失效，避免每次 runner 构造重复读取全部 Python 文件。
+- 验证：新增测试先得到 `9 failed, 8 passed`，修复后 runner 专项 `36 passed`；全量 `code/tests/` 在允许 OpenMP 共享内存的环境中 `287 passed, 2 warnings`。沙箱内唯一环境预检子进程因 OpenMP SHM 权限在进入断言前退出，沙箱外单项 `1 passed`。`20 passed` 是整改前两文件的正确历史数字，不改写为 19。
+- 判定：T01 的代码合同已完成，可以进入 T02。T01 尚未勾选的 MetroPT CLI 端到端框不是 runner 缺陷，而是等待 T02 创建 `configs/pilot/metropt3/point_matrix.yaml`；T02 创建配置后必须先运行真实 `--profile metropt3 --mode dry-run`，再关闭该遗留框。
+- Remaining risk：尚无真实 MetroPT matrix，因此本轮不能声称 MetroPT CLI 已端到端运行；T02 不得跳过首个真实 dry-run，也不得用临时/伪造 config 提前勾选遗留验收。
+
+## 2026-09-17 CH34-S02 审查修复与 CH34-S03-T01 代码准备
+
+- 阶段：S4 Reconstruction / S02 证据链修复；S03-T01 只完成 checker 代码准备，未关闭 Task。
+- 审查结论：原 T04 evaluator 仅由孤立单元测试覆盖，默认 trainer 仍返回空 prediction，manifest 不要求 prediction，protocol fingerprint 也未显式暴露 raw/partition/timeline/window/time-scale/realized-rate；原“每个报告数字可从 artifact 复算”和 T05 完整 fingerprint 表述不成立。
+- S02 修复：默认 point/probabilistic trainer 现在以唯一一次完整 test 评价生成 schema v1 prediction payload；保存 window ID、target/prediction/mask、概率区间、逐窗口 NLL/CRPS 贡献、train-only normalization、三次 history-only inference timing、训练计时和参数量。`metrics.json` 由 payload 统一复算，包含全局指标、逐通道标准化指标和逐通道物理单位指标；物理量不跨单位聚合。
+- runner/manifest 修复：completed run 必须具备 prediction artifact，manifest 记录 `run_id` 与 `test_evaluation_count=1`；baseline `head_type` 真实传入构造器；MetroPT window ID 经 sample/collator 进入 artifact；对角高斯 validation CRPS 与 NLL rows 不再错误依赖 flow head；CRPS 使用排序公式避免正式 `nsamples=100` 时构造 `[B,S,S,Q]` 张量。
+- 协议身份：provider fingerprint 显式包含 raw data、partition、timeline、window catalog、normalization、time scale、mask、realized rate、target schema 和 evaluator；重跑 14-entry smoke 后 fingerprint 唯一，split SHA 为 `906501667d02f06a0024c355f53c111c6b9ef2ab46e68c4a1e057e991e9edd04`，中心条件 train/valid/test 实际缺失率分别为 0.297017/0.301142/0.304313。
+- S03-T01 准备：`check_pilot_environment.py` 升级为 v2 profile-aware checker，profile 映射复用 runner 单一真源；MetroPT 报告从实际 CSV 重算 raw/partition/timeline/window/normalization/time-scale/target/evaluator 并生成中心 mask；code fingerprint 与 runner 同时覆盖 `code/` 和 `compare_code/`；新增 `--profile`、`--require-clean`，smoke 固定 LI+TCN + `point_mixed_030` 且 `test_metric_count=0`。遗留根目录 `autodl-preflight.json` 仅通过精确 ignore 规则排除，文件未修改、未删除、未作为证据。
+- 验证：新测试先 red 后 green；S02/S03 定向 90 项中仅沙箱内两个 CLI 子进程受 OpenMP SHM 限制，沙箱外 preflight `10 passed`；最终全量沙箱外 `313 passed, 2 warnings`；MetroPT all dry-run `49/49`；真实 smoke 为 point baseline `5/5`、probabilistic baseline `6/6`、ours `3/3`，合计 failed=0、test metrics=0；portability `3 passed`；`py_compile` 与 `git diff --check` 通过。
+- 未执行：尚未创建 clean commit、push、AutoDL checkout、GPU smoke 或跨机 report comparison；因此 CH34-S03-T01、T02 和 Phase S03 均保持未勾选。最近 20 个提交中的既有约定已核对为 `Co-Authored-By: Claude Code <noreply@anthropic.com>`，后续提交沿用该格式。

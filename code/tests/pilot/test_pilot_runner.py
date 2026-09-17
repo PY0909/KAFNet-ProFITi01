@@ -246,8 +246,8 @@ def test_continue_on_error_marks_only_the_failing_key(tmp_path):
         return {
             "history": [],
             "metrics": {"mae": 0.5, "test_metric_count": 1},
-            "checkpoint_bytes": b"",
-            "predictions": {},
+            "checkpoint_bytes": b"checkpoint",
+            "predictions": {"schema_version": 1},
         }
 
     runner = PilotRunner(
@@ -292,8 +292,8 @@ def test_baseline_first_gate_blocks_ours_until_every_baseline_key_completes(tmp_
         return {
             "history": [],
             "metrics": {"mae": 0.5, "test_metric_count": 1},
-            "checkpoint_bytes": b"",
-            "predictions": {},
+            "checkpoint_bytes": b"checkpoint",
+            "predictions": {"schema_version": 1},
         }
 
     runner = PilotRunner(
@@ -333,8 +333,8 @@ def test_gate_uses_manifest_evidence_not_run_ids(tmp_path):
         return {
             "history": [],
             "metrics": {"mae": 0.5, "test_metric_count": 1},
-            "checkpoint_bytes": b"",
-            "predictions": {},
+            "checkpoint_bytes": b"checkpoint",
+            "predictions": {"schema_version": 1},
         }
 
     summary = rerun.execute(trainer=spy_trainer, provider_factory=_stub_factory)
@@ -540,6 +540,85 @@ def test_default_trainer_end_to_end_on_synthetic_loaders():
 
         assert math.isfinite(metrics["mae"]) and math.isfinite(metrics["rmse"])
         assert outcome["checkpoint_bytes"]
+        predictions = outcome["predictions"]
+        assert predictions["schema_version"] == 1
+        assert predictions["track"] == "point"
+        assert len(predictions["window_id"]) == batches["test"].y_flat.shape[0]
+        assert predictions["target"] and predictions["prediction"] and predictions["mask"]
+        assert len(predictions["timing"]["inference_seconds"]) == 3
+
+
+def test_point_baseline_head_type_is_enforced_by_model_factory(tmp_path):
+    matrix_path = _tiny_point_matrix(tmp_path / "point.yaml")
+    spec = PilotRunner(
+        matrices=[load_matrix(matrix_path)], result_root=tmp_path / "result"
+    ).expand()[0]
+    spec = type(spec)(**{**spec.__dict__, "head_type": "mlp"})
+    from kaf_profiti.experiments.pilot_runner import build_model
+
+    with pytest.raises(ValueError, match="only supports head_type='linear'"):
+        build_model(spec, num_sensors=4, context_dim=3, options={}, device="cpu")
+
+
+def test_default_probabilistic_trainer_uses_one_replayable_test_payload(tmp_path):
+    from kaf_profiti.experiments.evaluator import metrics_from_prediction_payload
+    from kaf_profiti.experiments.pilot_runner import (
+        _with_smoke_dims,
+        build_model,
+        pilot_train_and_evaluate,
+    )
+
+    class _ListLoader:
+        def __init__(self, batches):
+            self._batches = batches
+
+        def __iter__(self):
+            return iter(self._batches)
+
+    spec = _with_smoke_dims(
+        PilotRunner(
+            matrices=[load_matrix(_tiny_prob_matrix(tmp_path / "prob.yaml"))],
+            result_root=tmp_path / "result",
+        ).expand()[0],
+        hidden_dim=8,
+        pred_len=3,
+    )
+    spec = type(spec)(**{**spec.__dict__, "epochs": 1, "nsamples": 4})
+    provider = TinyProvider()
+    model = build_model(spec, provider.num_sensors, provider.context_dim, {}, device="cpu")
+    batches = provider.batches()
+    loaders = {
+        split: _ListLoader([batches[split]]) for split in ("train", "valid", "test")
+    }
+
+    outcome = pilot_train_and_evaluate(model, loaders, spec, provider, device="cpu")
+    payload = outcome["predictions"]
+
+    assert payload["track"] == "probabilistic"
+    assert len(payload["lower"]) == len(payload["window_id"])
+    assert len(payload["nll_sum_per_window"]) == len(payload["window_id"])
+    assert len(payload["crps_sum_per_window"]) == len(payload["window_id"])
+    assert metrics_from_prediction_payload(payload) == outcome["metrics"]
+
+
+def test_crps_rows_matches_pairwise_definition_without_quadratic_tensor():
+    from kaf_profiti.experiments.pilot_runner import _crps_rows
+
+    target = torch.tensor([[0.0, 1.0], [2.0, 3.0]])
+    samples = torch.tensor(
+        [
+            [[-1.0, 0.0], [0.0, 1.0], [2.0, 3.0]],
+            [[1.0, 2.0], [2.0, 3.0], [4.0, 5.0]],
+        ]
+    )
+    mask = torch.tensor([[1.0, 0.0], [1.0, 1.0]])
+    term1 = (samples - target.unsqueeze(1)).abs().mean(dim=1)
+    pairwise = (
+        samples.unsqueeze(2) - samples.unsqueeze(1)
+    ).abs().mean(dim=(1, 2))
+    expected = ((term1 - 0.5 * pairwise) * mask).sum(dim=-1)
+
+    assert torch.allclose(_crps_rows(target, samples, mask), expected)
 
 
 def test_smoke_validator_rejects_failures_or_test_metrics(tmp_path):

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 import torch
 from torch import Tensor
@@ -19,6 +19,7 @@ class IndustrialBatch:
     query_channel_ids: Tensor
     rul: Tensor
     unit_id: Tensor
+    window_id: Optional[List[str]] = None
 
     def to(self, device: torch.device) -> "IndustrialBatch":
         return IndustrialBatch(
@@ -34,6 +35,7 @@ class IndustrialBatch:
             query_channel_ids=self.query_channel_ids.to(device),
             rul=self.rul.to(device),
             unit_id=self.unit_id.to(device),
+            window_id=self.window_id,
         )
 
 
@@ -54,6 +56,12 @@ class IndustrialCollator:
         context = torch.stack([sample.context for sample in batch])
         rul = torch.tensor([float(sample.rul) for sample in batch], dtype=torch.float32)
         unit_id = torch.tensor([int(sample.unit_id) for sample in batch], dtype=torch.long)
+        raw_window_ids = [getattr(sample, "window_id", None) for sample in batch]
+        window_id = (
+            [str(value) for value in raw_window_ids]
+            if all(value not in (None, "") for value in raw_window_ids)
+            else None
+        )
 
         batch_size, pred_len, num_sensors = Y_q.shape
         y_flat = Y_q.reshape(batch_size, pred_len * num_sensors)
@@ -73,4 +81,5 @@ class IndustrialCollator:
             query_channel_ids=query_channel_ids,
             rul=rul,
             unit_id=unit_id,
+            window_id=window_id,
         )
