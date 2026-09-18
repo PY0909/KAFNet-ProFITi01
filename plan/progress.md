@@ -853,3 +853,24 @@
 - Verification run：本机全量 318 passed（含 4 新测试）；49-key dry-run 不变；本机 CPU epochs=1 wiring 通过（三标志 true、beat_naive true）；AutoDL GPU epochs=5 正式通过。
 - Review result：T02 验收三项通过；Phase CH34-S03 闭合（T01+T02）。
 - Remaining risk：`data_gate.json` 尚未同步到 AutoDL（进入 CH3-S04 前建议作为环境准备 scp/生成，使 sanity/正式 run 的 naive floor 比较自包含）；CH3-S04 及后续 Phase 未执行。
+
+## 2026-09-18 CH3-S04 中心条件 7/7 闭合与 go/no-go（结论 go）
+
+- 阶段：S4 Reconstruction / CH3-S04 T01+T02+T03 全部完成，Phase CH3-S04 关闭。
+- 执行：AutoDL 有卡（RTX 3090，commit `c535097`，跨机 preflight `identity_sections_match` + 环境 smoke ok；实例 2026-09-17 更换为 nmb2:43676，仓库/数据集随数据盘位于 `/root/autodl-tmp/new_work`）。T01 5 baseline（elapsed 570.9-724.0s/run）、T02 KST-Light linear/mlp（695.8/699.2s），均 device=cuda 单会话完成；sanity 先行并纳入 ODE-RNN（li_tcn+ode_rnn 各 5 epoch），满足 2026-09-17 修订登记。
+- 验收结果：T01 validator completed=5/failed=0；T02 completed=2/failed=0 且 baseline-first gate 放行；7-run 轴差异化检查通过（model_id 互异、protocol_sha/shared_artifacts/code_fingerprint 完全一致、realized_rate 0.297/0.301/0.304、7 个 MAE 互异、预测有限且非全零）；产物回传本机后 dry-run 验签 verified_complete=7 / expected_new=0。
+- 结果要点：validation 最优 kst_light|mlp 0.2777（vs naive `std_micro` floor 0.4024，+31.0%，全场最优，压过最强 baseline ff_gru 0.2819）；test 最优 ff_gru 0.2389（vs test floor 0.4786，+50.1%）；7/7 低于 test floor，6/7 低于 valid floor（gru_d −0.6% 未过，判为该 baseline 收敛慢的真实属性）。go/no-go 诊断：**go**，报告 `plan/CH3-S04-go-no-go.md`（主表/逐通道/效率/病理四项）。
+- 口径更正（重要）：发现本仓库 run 指标为 standardized 空间（train-split z-score），CH34-S03-T02 记录的 beat_naive raw 基准（0.9159 / "改善 56.5%"）作废——正确基准 `std_micro` 0.4024，sanity 真实改善 +1.0%/+0.3%（5 epoch 触及 floor），三标志门禁结论不变。已在 implementation-plan CH34-S03-T02 追加更正登记；`pilot_runner.py` 的 beat_naive 基准修正（raw→std_micro）列为待办，不得在 CH3-S05 run 进行中插入。
+- 病理四项检查通过（无近零预测、无持续恶化——ode_rnn epoch 13 后退化由 best_valid checkpoint 兜底、无单通道支配 0.18-0.19、timing 同机可比）；val/test 排名扰动按单种子噪声处理，不做模型优劣声明。
+- 结论：中心条件协议可学习、全模型比较口径一致，进入 CH3-S05（42-run 缺失强度/机制单种子扩展）。
+
+### Capability-use audit
+
+- Required skills：executing-plans、verification、verification-before-completion、debugging。
+- Skills actually used：门禁链执行（preflight compare → sanity → full → 关机前复核）、轴差异化验收、跨机产物验签（dry-run verified）、指标口径溯源（normalization 判别 raw vs std）。
+- Inputs consumed：T01/T02/T03 合同、`data_gate.json` floors、7 个 run 的 manifest/metrics/history/predictions、mask bundle 内容摘要校验、AutoDL 环境（ssh 密钥通道）。
+- Inputs not used and why：未修改任何 `result/` 下源文件（metrics/predictions 只读）；未运行 CH3-S05；未做 lr sweep 或模型特异调参。
+- Artifacts produced：`result/pilot/metropt3/runs/`（7 run）与 `sanity/`（2 manifest）、`plan/CH3-S04-go-no-go.md`、implementation-plan T01/T02/T03/Phase 勾选与口径更正登记、AGENTS.md 实例信息更新（nmb2:43676、数据盘 new_work 布局）。
+- Verification run：AutoDL preflight `--require-gpu --smoke` ok（cuda_available=true、mask_bundles_fingerprinted=3）；sanity 三标志 true×2 + beat_naive；full 7/7 completed / failed=0；本机 dry-run verified_complete=7；轴差异化 PASS；逐通道/效率/病理四项复核。
+- Review result：T01/T02/T03 验收全过；Phase CH3-S04 关闭（go）。
+- Remaining risk：beat_naive 基准修正待办（须在代码窗口执行，run 期间禁改）；单种子 val/test 排名扰动留待多 seed formal；C-MAPSS/TEP 协议身份链未纳入本轮。

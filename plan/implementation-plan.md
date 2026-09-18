@@ -2958,6 +2958,7 @@ class WindowSufficientStats:
 **验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。 ✅
 
 **执行注记：** 训练曲线健康（train_loss 0.50→0.22 单调下降；valid 0.9996→0.3986，epoch 3 轻微波动后恢复，无过拟合）。`naive_floor.available=false` 与 `beat_naive=null` 出现在 AutoDL manifest 是因为 `data_gate.json` 为本机诊断产物（`result/` 不进 git、未同步到 AutoDL）；beat_naive 判定已在本机用 `result/pilot/metropt3/diagnostics/data_gate.json` 核对为 true。协议身份 split_sha256=`eb7b957c…` 与 T01 跨机一致。
+  - **2026-09-18 口径更正：** 上文 beat_naive 引用的 persistence raw 0.9159 为 raw 物理空间基准，与本仓库 run 指标的 standardized 空间（train-split z-score）不匹配——"改善 56.5%"作废。正确基准为 persistence `std_micro` MAE=0.4024，本条目真实改善为 ode_rnn +1.0%、li_tcn +0.3%（5 epoch 触及 floor）；三标志门禁结论不变。完整口径声明见 `plan/CH3-S04-go-no-go.md`；runner 的 beat_naive 比较基准修正（raw→std_micro）已列为待办，不得在 CH3-S05 run 进行中插入。
 
 ---
 
@@ -2965,7 +2966,7 @@ class WindowSufficientStats:
 
 > **训练配置基线（2026-09-17 确立）：** 本 Phase 全部 run（含后续 S05/S06 扩展）使用固定配方 AdamW lr=1e-3 / weight_decay=1e-4 / **全局 grad_clip_norm=1.0** / batch 128。裁剪为仓库既有入口的既定配方恢复（详见 CH34-S03-T02 修订登记），统一作用于所有模型，不构成模型特异调参。执行位置：AutoDL 有卡模式；本机只允许 dry-run/smoke/单 epoch 计时，不产生正式 artifact。
 
-- [ ] **Phase CH3-S04 完成：5 个 baseline 先完成，随后 KST-Light 两个 head 完成**
+- [x] **Phase CH3-S04 完成：5 个 baseline 先完成，随后 KST-Light 两个 head 完成**（2026-09-18，中心条件 7/7 验签 + go/no-go 结论 go，报告 `plan/CH3-S04-go-no-go.md`）
 
 #### Task CH3-S04-T01：运行 5 个点预测 baseline 的中心条件
 
@@ -2973,11 +2974,11 @@ class WindowSufficientStats:
 - [x] 在同一 AutoDL 环境依次运行 LI+TCN、FF+GRU、Masked TCN、GRU-D、ODE-RNN；单模型失败不停止其余模型。（同机 RTX 3090 一次会话连续完成 5/5，device=cuda，elapsed 570.9-724.0s/run，failed=[]）
 - [x] 每个模型完整使用 train/validation，按最低 validation MAE 保存 best checkpoint，冻结后完整 test 一次。（pilot_train_and_evaluate 按 best_valid 选择 checkpoint 并回载后再评估；5 个 manifest test_evaluation_count=1）
 - [x] validator 检查 `completed=5, nonfinite=0, fairness_mismatch=0, test_count_error=0`。（execute completed_count=5/failed=0；轴检查：预测全有限且非全零、protocol_sha/shared_artifacts/code_fingerprint 五 run 完全一致、realized_rate 0.297/0.301/0.304、test MAE 五模型互异 0.2389-0.3501；回传本机后 dry-run 验签 verified_complete=5, expected_new=0）
-- [x] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。（本轮 sanity 两模型均过：li_tcn init 0.9996→best 0.4013、ode_rnn init 4.0052→best 0.3985，均 < persistence raw floor 0.9159，beat_naive=true；ode_rnn 5 epoch 直接达标，无需 6-epoch 例外）
+- [x] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。（本轮 sanity 两模型均过：li_tcn init 0.9996→best 0.4013、ode_rnn init 4.0052→best 0.3985，均 < persistence std_micro floor 0.4024——beat_naive 代码当时以 raw 0.9159 判 true，口径更正见 T03 报告；ode_rnn 5 epoch 已触 floor，无需 6-epoch 例外）
 
 **验收：** 5 个 baseline artifact 全部验签后，baseline-first gate 才允许本文模型运行。 ✅
 
-**执行注记（2026-09-18）：** AutoDL RTX 3090（commit c535097，跨机 preflight `identity_sections_match`，环境 smoke ok）完成 5/5 baseline 中心条件。test MAE 排序：ff_gru 0.2389 < li_tcn 0.2605 < masked_tcn 0.2751 < ode_rnn 0.2989 < gru_d 0.3501，全部显著低于 persistence raw floor 0.9159。sanity 同时纳入 ODE-RNN，满足 2026-09-17 修订登记（2956 行）的纳入要求；grad clip=1.0 下 ODE-RNN 未复现发散（test 0.2989，sanity best 0.3985）。产物已回传本机 `result/pilot/metropt3/runs|sanity/` 并通过 dry-run 验签与轴差异化复核（2026-09-14 教训项：五 model_id 互异、fairness SHA 一致、指标跨模型有差异）。
+**执行注记（2026-09-18）：** AutoDL RTX 3090（commit c535097，跨机 preflight `identity_sections_match`，环境 smoke ok）完成 5/5 baseline 中心条件。test MAE 排序：ff_gru 0.2389 < li_tcn 0.2605 < masked_tcn 0.2751 < ode_rnn 0.2989 < gru_d 0.3501，全部低于 test persistence std_micro floor 0.4786（+26.8% ~ +50.1%；口径声明见 `plan/CH3-S04-go-no-go.md`）。sanity 同时纳入 ODE-RNN，满足 2026-09-17 修订登记（2956 行）的纳入要求；grad clip=1.0 下 ODE-RNN 未复现发散（test 0.2989，sanity best 0.3985）。产物已回传本机 `result/pilot/metropt3/runs|sanity/` 并通过 dry-run 验签与轴差异化复核（2026-09-14 教训项：五 model_id 互异、fairness SHA 一致、指标跨模型有差异）。
 
 #### Task CH3-S04-T02：运行 KST-Light Linear/MLP 中心条件
 
@@ -2993,13 +2994,13 @@ class WindowSufficientStats:
 
 #### Task CH3-S04-T03：生成中心条件 go/no-go 报告
 
-- [ ] 本机同步 7 个完整 artifact 并校验 manifest/artifact SHA，不手工修改源文件。
-- [ ] 输出 validation/test MAE、RMSE、逐传感器误差、参数量、训练/推理时间及相对 best naive 的改善率。
-- [ ] 检查是否存在全模型接近零预测、epoch 1 后持续恶化、单通道支配总误差或 timing 不可比。
-- [ ] 只给出 `go/fix/stop` 诊断，不报告 mean±std、置信区间、显著性或“证明优于”。
-- [ ] 只有 `go` 才进入 CH3-S05；`fix` 必须通过 validation-only 重跑，旧 run 保留但不得混入新矩阵。
+- [x] 本机同步 7 个完整 artifact 并校验 manifest/artifact SHA，不手工修改源文件。（dry-run 验签 verified_complete=7, expected_new=0；manifest 身份段/artifact SHA256/checkpoint_sha/protocol_sha 全链校验）
+- [x] 输出 validation/test MAE、RMSE、逐传感器误差、参数量、训练/推理时间及相对 best naive 的改善率。（`plan/CH3-S04-go-no-go.md`：主表 + 逐通道表 + 效率表；naive 基准取 std_micro valid 0.4024 / test 0.4786）
+- [x] 检查是否存在全模型接近零预测、epoch 1 后持续恶化、单通道支配总误差或 timing 不可比。（四项全过：sd_ratio 0.73-0.84、ode_rnn 后期退化被 best_valid 兜底、通道占比 0.18-0.19 无支配、同机 timing 可比）
+- [x] 只给出 `go/fix/stop` 诊断，不报告 mean±std、置信区间、显著性或“证明优于”。（结论 go，单种子边界已在报告声明）
+- [x] 只有 `go` 才进入 CH3-S05；`fix` 必须通过 validation-only 重跑，旧 run 保留但不得混入新矩阵。（go，无需 fix；遗留项：beat_naive 比较基准 raw→std_micro 修正排入下一代码窗口）
 
-**验收：** 中心条件证明 MetroPT 协议可学习且全模型比较口径一致。
+**验收：** 中心条件证明 MetroPT 协议可学习且全模型比较口径一致。 ✅ 报告：`plan/CH3-S04-go-no-go.md`（2026-09-18，结论 go）
 
 ---
 
