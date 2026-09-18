@@ -854,7 +854,13 @@
 - Review result：T02 验收三项通过；Phase CH34-S03 闭合（T01+T02）。
 - Remaining risk（历史记录，已由后续修复取代）：data_gate 同步风险已不再是当前主问题；loader-contract sanity gate 已在 commit `2b47c07` 上重跑并生成新 manifest。CH3-S04 正式结果与 sanity gate 分开记录。
 
-## 2026-09-18 CH3-S04 中心条件 7/7 闭合与 go/no-go（结论 go）
+### 2026-09-18 CH3-S05-T01 baseline 30/30 完成
+
+- 5 个 baseline（LI-TCN、FF+GRU、Masked-TCN、GRU-D、ODE-RNN）覆盖 6 个 point 条件：mixed_030（复用 CH3-S04）+ random_000/030/070 + low_rate_030 + block_offline_030，共 30/30。
+- 下载归档审计通过：全部 manifest/artifact SHA、history 50 epoch 有限性、model identity、condition mask/realized-rate、target schema 和跨模型 protocol invariant 检查通过；未发现需要重跑的实验数据缺陷。
+- `random_000` 下 LI-TCN/Masked-TCN history/checkpoint 相同是 0% 缺失时输入变换等价且 seed 相同的预期现象；非零缺失条件 artifact 不重复。
+- provenance caveat：混合条件复用旧 fingerprint，新 25 run 使用 commit `2b47c07`/`fdd06602…`；完整审计见 `plan/ch3-s05-t01-baseline-evidence.md`。允许进入 T02，禁止覆盖已验签 source key。
+
 
 - 阶段：S4 Reconstruction / CH3-S04 T01+T02+T03 全部完成，Phase CH3-S04 关闭。
 - 执行：AutoDL 有卡（RTX 3090，commit `c535097`，跨机 preflight `identity_sections_match` + 环境 smoke ok；实例 2026-09-17 更换为 nmb2:43676，仓库/数据集随数据盘位于 `/root/autodl-tmp/new_work`）。T01 5 baseline（elapsed 570.9-724.0s/run）、T02 KST-Light linear/mlp（695.8/699.2s），均 device=cuda 单会话完成；sanity 先行并纳入 ODE-RNN（li_tcn+ode_rnn 各 5 epoch），满足 2026-09-17 修订登记。

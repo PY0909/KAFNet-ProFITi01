@@ -47,9 +47,11 @@ The `c535097 → 2b47c07` code delta is limited to pilot sanity and manifest pro
 
 `_train_one_epoch`, `_valid_score`, `_test_prediction_artifact`, `pilot_train_and_evaluate`, checkpoint selection, the evaluator, and all matrix/protocol identities are byte-identical between the two commits, so the seven CH3-S04 formal results are scientifically equivalent to runs that would be produced under `2b47c07`. The mixed@0.30 condition is therefore reused for CH3-S05 rather than retrained.
 
-## Provenance contract
+## CH3-S05-T01 baseline extension
 
-A complete pilot evidence chain is:
+The 30 baseline point runs are cataloged in `plan/ch3-s05-t01-baseline-evidence.md`: five reused `point_mixed_030` runs plus 25 new runs across random 0/30/70, low-rate 30, and block-offline 30. Downloaded-artifact audit found zero manifest/SHA/history/protocol/condition-axis defects. The reused mixed runs retain the historical `f44952ed…` fingerprint; the 25 new runs use `2b47c07`/`fdd06602…`, as documented above.
+
+
 
 `claim/table -> aggregate command -> scientific key/seed -> prediction/metrics -> checkpoint -> resolved config -> manifest -> protocol/shared-artifact/code hash -> preflight identity`.
 

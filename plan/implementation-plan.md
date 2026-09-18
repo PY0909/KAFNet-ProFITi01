@@ -3006,17 +3006,13 @@ class WindowSufficientStats:
 
 ### CH3-S05：第三章缺失强度与机制单种子扩展
 
-- [ ] **Phase CH3-S05 完成：第三章 42/42 个唯一 point run 闭合**
+- [ ] **Phase CH3-S05 完成：第三章 42/42 个唯一 point run 闭合**（T01 baseline 30/30 已完成；待 T02 的 KST-Light 10 个剩余条件 run 及 T03 汇总）
 
 #### Task CH3-S05-T01：运行 baseline 的其余 5 个条件
 
-- [ ] dry-run 排除已完成的 mixed 30%，预期 `5 baseline * 5 remaining conditions = 25` 个新 run。
-- [ ] 先完成 random 0/30/70 强度轴，再完成 low-rate 30、block-offline 30；mixed 30 复用 CH3-S04 结果。
-- [ ] 每完成一个模型的首个新条件即检查 history mask SHA、实际缺失率、target SHA 和 validation 曲线，再继续该模型其余条件。
-- [ ] 单个 key 失败只记录失败并继续；修复后只 resume 失败 key，禁止覆盖已验签 run。
-- [ ] validator 检查 baseline 累计 `30/30`，且 `condition_axis_effective=true`。
+- [x] **Task CH3-S05-T01 完成：5 个 baseline 覆盖 6 个中心/扩展条件，共 30/30 个有效 run**（2026-09-18：复用 CH3-S04 `point_mixed_030` 的 5 个 baseline，新增 random 0/30/70、low-rate 30、block-offline 30 各 25 个 run；下载归档审计确认 30/30 manifest/artifact SHA、history、condition axis 和 target schema 全通过。新 run 使用 commit `2b47c07`；旧 mixed run 保留原始 fingerprint 并在 evidence index 中区分）
 
-**验收：** baseline 30/30 全部完成后才允许调度本文模型剩余条件。
+**验收：** baseline 30/30 全部完成，且 manifest/artifact SHA、history 有限性、mask/realized-rate 条件轴、target schema 与模型 identity 检查通过；允许调度本文模型剩余条件。✅
 
 #### Task CH3-S05-T02：运行 KST-Light 的其余 5 个条件
 
