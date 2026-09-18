@@ -9,8 +9,8 @@
 ## 口径声明（含一项更正）
 
 - 全部 run 指标（train/validation/test 的 MAE/RMSE）与 data_gate 的 `std_micro` floor 同处 standardized 空间（train-split z-score；判据：predictions payload 的 target 值以 0 为中心，raw 物理量如 TP2 压力不可能为负）。naive floor 的正确基准：**valid persistence `std_micro` MAE=0.4024（RMSE=0.8978）**；**test `std_micro` MAE=0.4786（RMSE=0.9991）**。
-- **更正（2026-09-18）：** CH34-S03-T02 sanity 的 `beat_naive` 代码比较使用了 `persistence_mae_raw=0.9159`（raw 物理空间），与指标的 standardized 空间不匹配；当日记录的"改善 56.5%"为错误口径，作废。按 data_gate `std_micro` 参考值粗估（跨口径指示值，非同掩码比较）：ode_rnn 0.3985 vs 0.4024（1.0%）、li_tcn 0.4013 vs 0.4024（0.3%）——5 epoch 仅触及 floor。"大幅超越 naive"的证据来自本轮 50-epoch 完整 run，而非 sanity。`beat_naive` 比较基准已在代码中修正为同一 validation loader 的 standardized masked-query LOCF persistence（见"遗留注意点"）；修正 commit 上重跑前，旧 sanity manifest 仅作历史记录，不作为现行 gate 证据。
-- sanity 的 valid MAE 与当前修正后的 persistence baseline 均使用 masked-query standardized micro 聚合；data_gate 的 all-query `std_micro` floor 仅作为 formal run 的参考，不用于 sanity `beat_naive` gate。两者均为单次训练轨迹，不构成多 seed 统计。
+- **更正（2026-09-18）：** CH34-S03-T02 sanity 的 `beat_naive` 代码比较使用了 `persistence_mae_raw=0.9159`（raw 物理空间），与指标的 standardized 空间不匹配；当日记录的"改善 56.5%"为错误口径，作废。按 data_gate `std_micro` 参考值粗估（跨口径指示值，非同掩码比较）：ode_rnn 0.3985 vs 0.4024（1.0%）、li_tcn 0.4013 vs 0.4024（0.3%）——5 epoch 仅触及 floor。新 loader-LOCF 基线为 0.4572，故修正后的两个 sanity 结果仍为 beat_naive，但相对改善约为 12.8%（ODE-RNN）和 12.2%（LI+TCN）；该值仅适用于同一 validation-loader 契约。"大幅超越 naive"的证据来自本轮 50-epoch 完整 run，而非 sanity。`beat_naive` 比较基准已在代码中修正为同一 validation loader 的 standardized masked-query LOCF persistence；旧 sanity manifest 仅作历史记录，不作为现行 gate 证据。
+- sanity 的 valid MAE 与当前修正后的 persistence baseline 均使用 masked-query standardized micro 聚合；data_gate 的 all-query `std_micro` floor 仅作为 formal run 的参考，不用于 sanity `beat_naive` gate。sanity loader-LOCF baseline=0.4572，两个重跑结果仍 `beat_naive=true`；两者均为单次训练轨迹，不构成多 seed 统计。
 
 ## 主表（validation/test，std 空间）
 

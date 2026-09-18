@@ -33,7 +33,7 @@ The `...` prefix is a display abbreviation only. Exact keys and complete hashes 
 | S03-SAN-ODE | `result/pilot/metropt3/sanity/<ode_rnn-key>/` | sanity_train | same as above | same; never formal ranking |
 | S01-GATE | `result/pilot/metropt3/diagnostics/data_gate.json` | data_gate | raw and standardized all-query floors | formal all-query reference only |
 
-Historical sanity manifests generated before the aligned baseline implementation are superseded for `beat_naive`; they must not be presented as current gate evidence. After the code fix, rerun only the two validation-only sanity jobs and regenerate their manifests.
+Historical sanity manifests generated before the aligned baseline implementation are superseded for `beat_naive`; the replacement manifests were generated on commit `2b47c07`. Their loader-contract persistence baseline is 0.4572 (standardized masked-query LOCF micro); they must remain separate from the data-gate all-query floor and formal pilot ranking.
 
 ## Provenance contract
 

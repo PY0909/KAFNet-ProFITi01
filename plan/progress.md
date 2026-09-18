@@ -837,11 +837,11 @@
 
 - 阶段：S4 Reconstruction / CH34-S03 AutoDL 环境预检与中心条件学习门禁；本条目完成 T02 并关闭 Phase CH34-S03。
 - 实现：新增 `pilot_sanity_train`（5-epoch train/valid，不接触 test）与 `PilotRunner.run_sanity_train`（选 point li_tcn@point_mixed_030，独立目录 `sanity/`，manifest `run_level=sanity_train` + `test_evaluation_count=0`，不写 prediction/checkpoint）；CLI 增加 `--mode sanity --epochs`。4 项新测试。
-- 执行：AutoDL GPU（device=cuda）跑 `--mode sanity --epochs 5`，产物 `result/pilot/metropt3/sanity/`。
+- 执行：AutoDL GPU（device=cuda）跑 `--mode sanity --epochs 5`，产物位于 `result/pilot/metropt3/sanity/`；旧 raw-gate 产物已归档至 `sanity_superseded_20260918_raw_gate/`。
 - 验收结果：`finite=true`、`updated=true`、`validation_improved=true`；init_valid_mae 0.9996 → best_valid_mae 0.3986（epoch 5）；train_loss 0.50→0.22 单调下降，valid 无过拟合；test_evaluation_count=0；协议 split_sha256=`eb7b957c…` 与 T01 一致。
-- naive floor 比较（历史口径，已作废）：旧记录把 standardized masked-query valid MAE 与 data_gate raw all-query floor 混比，并给出 56.5%；当前有效 gate 必须使用同一 validation loader 的 standardized masked-query persistence baseline。受影响 sanity 需在修正代码后重跑；不把旧 `beat_naive` 当作现行证据。
+- naive floor 比较（历史口径，已作废）：旧记录把 standardized masked-query valid MAE 与 data_gate raw all-query floor 混比，并给出 56.5%。修正后的同一 validation-loader LOCF persistence baseline=0.4572；li_tcn/ode_rnn 的 best valid=0.4013/0.3985，均 beat_naive，loader-contract 相对改善约 12.2%/12.8%。这些数值仅用于 sanity gate，不替代正式 data-gate all-query floor。
 - 固定优化器/预算：AdamW lr=1e-3 weight_decay=1e-4、5 epoch、batch 128；本轮无 lr sweep、无模型特异调参。
-- 结论：中心条件单种子 pilot 显示存在可优化信号（不构成一般性“协议可学习”证明），学习门禁的三项训练标志通过；在修正后的 persistence 契约验证前，不把历史 `beat_naive` 数值作为独立结论。Phase CH34-S03 的 smoke/sanity readiness 记录保留，但需标注 gate 口径待修正。
+- 结论：中心条件单种子 pilot 显示存在可优化信号（不构成一般性“协议可学习”证明），学习门禁三项训练标志和修正后的 loader-contract `beat_naive` 均通过。Phase CH34-S03 的 smoke/sanity readiness 记录保留；sanity gate 与正式 data-gate floor 分开解释。
 
 ### Capability-use audit
 
@@ -852,7 +852,7 @@
 - Artifacts produced：`pilot_sanity_train`/`run_sanity_train`、`--mode sanity --epochs`、`test_pilot_sanity_train.py`（4 项）、AutoDL sanity manifest/history。
 - Verification run：本机全量 318 passed（含 4 新测试）；49-key dry-run 不变；本机 CPU epochs=1 wiring 通过（三标志 true、beat_naive true）；AutoDL GPU epochs=5 正式通过。
 - Review result：T02 验收三项通过；Phase CH34-S03 闭合（T01+T02）。
-- Remaining risk（历史记录，已由后续修复计划取代）：data_gate 同步风险已不再是当前主问题；现行待办是修正并重跑 sanity 的 standardized masked-query persistence gate，再更新其 manifest 与证据索引。CH3-S04 正式结果与 sanity gate 分开记录。
+- Remaining risk（历史记录，已由后续修复取代）：data_gate 同步风险已不再是当前主问题；loader-contract sanity gate 已在 commit `2b47c07` 上重跑并生成新 manifest。CH3-S04 正式结果与 sanity gate 分开记录。
 
 ## 2026-09-18 CH3-S04 中心条件 7/7 闭合与 go/no-go（结论 go）
 
@@ -860,7 +860,7 @@
 - 执行：AutoDL 有卡（RTX 3090，commit `c535097`，跨机 preflight `identity_sections_match` + 环境 smoke ok；实例 2026-09-17 更换为 nmb2:43676，仓库/数据集随数据盘位于 `/root/autodl-tmp/new_work`）。T01 5 baseline（elapsed 570.9-724.0s/run）、T02 KST-Light linear/mlp（695.8/699.2s），均 device=cuda 单会话完成；sanity 先行并纳入 ODE-RNN（li_tcn+ode_rnn 各 5 epoch），满足 2026-09-17 修订登记。
 - 验收结果：T01 validator completed=5/failed=0；T02 completed=2/failed=0 且 baseline-first gate 放行；7-run 轴差异化检查通过（model_id 互异、protocol_sha/shared_artifacts/code_fingerprint 完全一致、realized_rate 0.297/0.301/0.304、7 个 MAE 互异、预测有限且非全零）；产物回传本机后 dry-run 验签 verified_complete=7 / expected_new=0。
 - 结果要点：validation 最低为 kst_light|mlp 0.2777（相对 formal naive `std_micro` floor 0.4024，+31.0%，本单种子观察值）；test 最优 ff_gru 0.2389（+50.1%）；7/7 低于 test floor，6/7 低于 valid floor（gru_d −0.6% 未过）。go/no-go 是继续单种子扩展的工程诊断，不作模型优越性或统计显著性结论。
-- 口径更正（重要）：CH34-S03-T02 的 beat_naive raw 基准（0.9159 / “改善 56.5%”）作废。正式 run 的 data-gate `std_micro` floor 仅用于 formal all-query 比较；sanity gate 已改为同一 validation loader 的 standardized masked-query persistence baseline。受影响 sanity 需重跑并更新 manifest；七个正式中心条件 artifact 不变。
+- 口径更正（重要）：CH34-S03-T02 的 beat_naive raw 基准（0.9159 / “改善 56.5%”）作废。正式 run 的 data-gate `std_micro` floor 仅用于 formal all-query 比较；sanity gate 已改为同一 validation loader 的 standardized masked-query LOCF persistence baseline=0.4572，li_tcn/ode_rnn 改善约 12.2%/12.8%。七个正式中心条件 artifact 不变。
 - 病理四项检查通过（无近零预测、无持续恶化——ode_rnn epoch 13 后退化由 best_valid checkpoint 兜底、无单通道支配 0.18-0.19、timing 同机可比）；val/test 排名扰动按单种子噪声处理，不做模型优劣声明。
 - 结论：中心条件 pilot 显示存在可优化信号、全模型比较口径一致，进入 CH3-S05 的单种子扩展；这不关闭 D3-D5 formal stage gates，也不构成多 seed 模型优越性结论。
 
@@ -870,7 +870,7 @@
 - Skills actually used：门禁链执行（preflight compare → sanity → full → 关机前复核）、轴差异化验收、跨机产物验签（dry-run verified）、指标口径溯源（normalization 判别 raw vs std）。
 - Inputs consumed：T01/T02/T03 合同、`data_gate.json` floors、7 个 run 的 manifest/metrics/history/predictions、mask bundle 内容摘要校验、AutoDL 环境（ssh 密钥通道）。
 - Inputs not used and why：未修改任何 `result/` 下源文件（metrics/predictions 只读）；未运行 CH3-S05；未做 lr sweep 或模型特异调参。
-- Artifacts produced：`result/pilot/metropt3/runs/`（7 run）与 `sanity/`（2 manifest）、`plan/CH3-S04-go-no-go.md`、implementation-plan T01/T02/T03/Phase 勾选与口径更正登记、AGENTS.md 实例信息更新（nmb2:43676、数据盘 new_work 布局）。
-- Verification run：AutoDL preflight `--require-gpu --smoke` ok（cuda_available=true、mask_bundles_fingerprinted=3）；sanity 三标志 true×2 + beat_naive；full 7/7 completed / failed=0；本机 dry-run verified_complete=7；轴差异化 PASS；逐通道/效率/病理四项复核。
+- Artifacts produced：`result/pilot/metropt3/runs/`（7 run）、`sanity/`（commit 2b47c07 生成的 2 manifest；旧 raw-gate 产物已归档）与 `plan/CH3-S04-go-no-go.md`、implementation-plan T01/T02/T03/Phase 勾选和口径更正登记、`plan/pilot-evidence-index.md`。
+- Verification run（修正后）：AutoDL preflight（commit `2b47c07`、clean=true、CUDA）通过；li_tcn/ode_rnn sanity 三标志 true×2、同一 validation-loader LOCF `beat_naive=true`×2；full 7/7 formal run 未重跑；本机 dry-run/轴差异化及既有正式 artifact 验签保持有效。
 - Review result：T01/T02/T03 验收全过；Phase CH3-S04 关闭（go）。
-- Remaining risk：beat_naive 基准修正待办（须在代码窗口执行，run 期间禁改）；单种子 val/test 排名扰动留待多 seed formal；C-MAPSS/TEP 协议身份链未纳入本轮。
+- Remaining risk：sanity loader-LOCF 基线与 data-gate all-query floor 是不同契约，已在报告中分开；单种子 val/test 排名扰动留待多 seed formal；C-MAPSS/TEP 协议身份链未纳入本轮。

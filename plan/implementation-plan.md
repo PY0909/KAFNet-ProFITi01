@@ -2929,7 +2929,7 @@ class WindowSufficientStats:
 
 ### CH34-S03：AutoDL 环境预检与中心条件学习门禁
 
-- [x] **Phase CH34-S03 完成：同一 clean commit 在 AutoDL 通过数据、设备和 validation-only 学习门禁**（T01 跨机身份一致 + GPU smoke pass；T02 LI+TCN 5-epoch sanity 三标志 finite/updated/validation_improved 全 true、beat_naive true。中心条件 MetroPT 协议可学习，可进入 CH3-S04 第三章 baseline）
+- [x] **Phase CH34-S03 完成：同一 clean commit 在 AutoDL 通过数据、设备和 validation-only 学习门禁**（T01 跨机身份一致 + GPU smoke pass；T02 LI+TCN/ODE-RNN 5-epoch sanity 的 finite/updated/validation_improved 与同一 validation-loader LOCF `beat_naive` 全 true。该 gate 是单种子 pilot readiness 信号，不构成一般性协议可学习性证明）
 
 #### Task CH34-S03-T01：冻结版本并核对跨机身份
 
@@ -2957,8 +2957,8 @@ class WindowSufficientStats:
 
 **验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。 ✅
 
-**执行注记（历史记录，已由 2026-09-18 更正取代）：** 当时记录的 raw floor 与 56.5% 改善不能用于当前 gate。当前 sanity baseline 必须由 validation loader 按 standardized masked-query micro 契约计算；data_gate 的 raw/all-query floor 仅作参考。协议身份 split_sha256=`eb7b957c…` 与 T01 跨机一致。
-  - **2026-09-18 口径更正：** 上文 beat_naive 引用的 persistence raw 0.9159 为 raw 物理空间基准，与本仓库 run 指标的 standardized 空间（train-split z-score）不匹配——"改善 56.5%"作废。按 data_gate `std_micro` 参考值粗估的改善为 ode_rnn +1.0%、li_tcn +0.3%（5 epoch 触及 floor；跨口径指示值）。完整口径声明见 `plan/CH3-S04-go-no-go.md`；runner 的 beat_naive 基准已在 2026-09-18 代码窗口修正为同一 validation loader 的 standardized masked-query LOCF persistence，旧 sanity manifest 在修正 commit 上重跑并重新生成前不作为现行 gate 证据。
+**执行注记（2026-09-18，修正后）：** AutoDL sanity 重跑使用 commit `2b47c07`、clean=true、CUDA；训练曲线与三标志均通过。新 validation-loader standardized masked-query LOCF persistence baseline=0.4572，LI+TCN best=0.4013、ODE-RNN best=0.3985，二者 `beat_naive=true`，相对改善约 12.2%/12.8%。data_gate 的 raw/all-query floor 仍作为独立参考，不能与该 sanity baseline 混比。
+  - **2026-09-18 口径更正：** 上文 beat_naive 引用的 persistence raw 0.9159 为 raw 物理空间基准，与本仓库 run 指标的 standardized 空间（train-split z-score）不匹配——"改善 56.5%"作废。按 data_gate `std_micro` 参考值粗估的改善为 ode_rnn +1.0%、li_tcn +0.3%（5 epoch 触及 floor；跨口径指示值）；修正后的同一 validation-loader LOCF baseline=0.4572，两个重跑 sanity 分别达到 0.3985/0.4013，改善约 12.8%/12.2%，仅表示该 loader 契约下的 gate。完整口径声明见 `plan/CH3-S04-go-no-go.md`；runner 的 beat_naive 基准已在 2026-09-18 代码窗口修正，旧 sanity manifest 已归档。
 
 ---
 
