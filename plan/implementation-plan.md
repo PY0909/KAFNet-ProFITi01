@@ -2981,13 +2981,15 @@ class WindowSufficientStats:
 
 #### Task CH3-S04-T02：运行 KST-Light Linear/MLP 中心条件
 
-- [ ] dry-run 筛选 `track=point,family=ours,condition_id=point_mixed_030`；预期 `expected=2,new=2`。
-- [ ] gate 核对同条件 5/5 baseline manifest、checkpoint 和公平性 SHA。
-- [ ] 运行 KST-Light Linear 与 KST-Light MLP；除 head 外不得更改 encoder、数据、epoch、batch 或优化预算。
-- [ ] checkpoint 只由 validation MAE 选择，test 各完整评估一次。
-- [ ] validator 检查 `completed=2, nonfinite=0, fairness_mismatch=0, test_count_error=0`。
+- [x] dry-run 筛选 `track=point,family=ours,condition_id=point_mixed_030`；预期 `expected=2,new=2`。（AutoDL dry-run expected_total=2, expected_new=2：kst_light|linear、kst_light|mlp）
+- [x] gate 核对同条件 5/5 baseline manifest、checkpoint 和公平性 SHA。（execute 内建 baseline-first gate 放行；本机 7-run 复核 protocol_sha/shared_artifacts/code_fingerprint 完全一致）
+- [x] 运行 KST-Light Linear 与 KST-Light MLP；除 head 外不得更改 encoder、数据、epoch、batch 或优化预算。（同矩阵同条件同 seed，仅 head_type 不同；device=cuda，elapsed 695.8/699.2s）
+- [x] checkpoint 只由 validation MAE 选择，test 各完整评估一次。（best_valid 选择；两 manifest test_evaluation_count=1）
+- [x] validator 检查 `completed=2, nonfinite=0, fairness_mismatch=0, test_count_error=0`。（completed_count=2/failed=0；轴检查 7-run 全过：预测全有限非全零、7 个 MAE 互异；回传本机 dry-run 验签 verified_complete=7, expected_new=0）
 
-**验收：** 中心条件 7/7 齐全后才能扩展缺失强度与机制。
+**验收：** 中心条件 7/7 齐全后才能扩展缺失强度与机制。 ✅
+
+**执行注记（2026-09-18）：** 中心条件 7/7 闭合（同机 RTX 3090、c535097、与 baseline 同 protocol_sha）。validation MAE 排序：kst_light|mlp 0.2777 < ff_gru 0.2819 < kst_light|linear 0.2956 < li_tcn 0.3157 < masked_tcn 0.3464 < ode_rnn 0.3552 < gru_d 0.4048——kst_light|mlp validation 全场最优；test MAE 排序（ff_gru 0.2389 < li_tcn 0.2605 < masked_tcn 0.2751 < kst_light|mlp 0.2923 < kst_light|linear 0.2988 < ode_rnn 0.2989 < gru_d 0.3501）与 validation 有排名扰动，留待 T03 go/no-go 诊断，不在单种子 pilot 下过度解读。
 
 #### Task CH3-S04-T03：生成中心条件 go/no-go 报告
 
