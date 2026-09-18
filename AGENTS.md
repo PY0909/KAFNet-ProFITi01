@@ -29,7 +29,7 @@
   - 风险阈值采用 validation-only Platt calibration，`q=0.95`。
   - 对比模型包括 TCN-Gaussian、PatchTST-Gaussian、GRU-D、ODE-RNN、mTAN、GraFITi、ProFITi、KAFNet 等。
   - 论文使用 Markdown 起草，后续转为 Word .docx。
-  - GPU 资源通过 AutoDL 按需租用（RTX 3090 24GB），实验使用 `nohup` 或 `tmux` 后台运行。SSH: `ssh -p 39406 root@connect.nmb1.seetacloud.com`。
+  - GPU 资源通过 AutoDL 按需租用（RTX 3090 24GB），实验使用 `nohup` 或 `tmux` 后台运行。SSH: `ssh -p 43676 root@connect.nmb2.seetacloud.com`。
 
 ## 3. 目录边界
 
@@ -84,24 +84,24 @@
 
 ```bash
 # SSH 连接
-ssh -p 39406 root@connect.nmb1.seetacloud.com
+ssh -p 43676 root@connect.nmb2.seetacloud.com
 
-# 工作目录（数据盘，关机不丢失）
-cd /root/autodl-tmp
+# 工作目录（git 仓库在数据盘，关机不丢失；代码同步用 git pull）
+cd /root/autodl-tmp/new_work
 ```
 
 **当前实例配置**：
 
 | 项 | 值 |
 |---|---|
-| 平台 | AutoDL（2026-09-17 起更换实例，容器 ID 待下次 preflight 登记更新） |
+| 平台 | AutoDL（2026-09-17 起更换实例，容器 `autodl-container-511a4fa322-e1e797dc`） |
 | GPU | RTX 3090 (24GB) × 1 |
 | CPU | 14 vCPU Intel Xeon Gold 6330 @ 2.00GHz |
 | 内存 | 90 GB |
 | 系统盘 | 30 GB |
 | 镜像 | PyTorch 2.5.1 + Python 3.12 + CUDA 12.4 (Ubuntu 22.04) |
 | 数据盘路径 | `/root/autodl-tmp` |
-| SSH 端口 | 39406 |
+| SSH 端口 | 43676 |
 
 ### 文件传输
 
@@ -113,21 +113,21 @@ cd /Users/ppy/研/00提交资料汇总/new_work
 tar --exclude='__pycache__' --exclude='.DS_Store' --exclude='*.pyc' \
     --exclude='.pytest_cache' --exclude='code/code.zip' \
     -czf /tmp/new_work_code.tar.gz code/ compare_code/ dataset/ requirement.txt
-scp -P 39406 /tmp/new_work_code.tar.gz root@connect.nmb1.seetacloud.com:/root/autodl-tmp/
+scp -P 43676 /tmp/new_work_code.tar.gz root@connect.nmb2.seetacloud.com:/root/autodl-tmp/new_work/
 
 # SSH 登录后解压
-ssh -p 39406 root@connect.nmb1.seetacloud.com
-cd /root/autodl-tmp
+ssh -p 43676 root@connect.nmb2.seetacloud.com
+cd /root/autodl-tmp/new_work
 tar -xzf new_work_code.tar.gz && rm new_work_code.tar.gz
 
 # ===== 从 AutoDL 下载结果到本地 =====
 
 # 方式一：拉取整个 result 目录
-scp -P 39406 -r root@connect.nmb1.seetacloud.com:/root/autodl-tmp/result/ /Users/ppy/研/00提交资料汇总/new_work/result/
+scp -P 43676 -r root@connect.nmb2.seetacloud.com:/root/autodl-tmp/new_work/result/ /Users/ppy/研/00提交资料汇总/new_work/result/
 
 # 方式二：打包后下载（推荐用于大批量结果）
-ssh -p 39406 root@connect.nmb1.seetacloud.com "cd /root/autodl-tmp && tar -czf /tmp/results.tar.gz result/"
-scp -P 39406 root@connect.nmb1.seetacloud.com:/tmp/results.tar.gz /tmp/
+ssh -p 43676 root@connect.nmb2.seetacloud.com "cd /root/autodl-tmp/new_work && tar -czf /tmp/results.tar.gz result/"
+scp -P 43676 root@connect.nmb2.seetacloud.com:/tmp/results.tar.gz /tmp/
 tar -xzf /tmp/results.tar.gz -C /Users/ppy/研/00提交资料汇总/new_work/
 ```
 
@@ -141,8 +141,8 @@ nohup python -u code/run_experiment.py \
   --seed 2027 \
   --missing-rate 0.3 --missing-mode mixed \
   --history-len 168 --pred-len 24 --stride 60 \
-  --data-root /root/autodl-tmp/dataset \
-  --output-dir /root/autodl-tmp/result \
+  --data-root /root/autodl-tmp/new_work/dataset \
+  --output-dir /root/autodl-tmp/new_work/result \
   --run-id metropt3_kst_seed2027_$(date +%Y%m%d_%H%M%S) \
   --epochs 50 --batch-size 128 --nsamples 100 --device cuda \
   > logs/run.log 2>&1 &
@@ -168,8 +168,8 @@ for seed in 2026 2027 2028; do
     --seed $seed \
     --missing-rate 0.3 --missing-mode mixed \
     --history-len 168 --pred-len 24 --stride 60 \
-    --data-root /root/autodl-tmp/dataset \
-    --output-dir /root/autodl-tmp/result \
+    --data-root /root/autodl-tmp/new_work/dataset \
+    --output-dir /root/autodl-tmp/new_work/result \
     --run-id metropt3_kst_seed${seed}_$(date +%Y%m%d_%H%M%S) \
     --epochs 50 --batch-size 128 --nsamples 100 --device cuda \
     --hidden-dim 64 --te-dim 10 --kernel-count 4 \
@@ -188,7 +188,7 @@ wait && echo "All seeds done"
 ### MetroPT-3 主实验（主模型 kst_probflow）
 
 ```bash
-cd /root/autodl-tmp
+cd /root/autodl-tmp/new_work
 
 TMPDIR=/tmp CUDA_VISIBLE_DEVICES=0 python -u code/run_experiment.py \
   --dataset metropt3_chrono_502030 \
@@ -199,8 +199,8 @@ TMPDIR=/tmp CUDA_VISIBLE_DEVICES=0 python -u code/run_experiment.py \
   --history-len 168 \
   --pred-len 24 \
   --stride 60 \
-  --data-root /root/autodl-tmp/dataset \
-  --output-dir /root/autodl-tmp/result \
+  --data-root /root/autodl-tmp/new_work/dataset \
+  --output-dir /root/autodl-tmp/new_work/result \
   --run-id metropt3_kst_$(date +%Y%m%d_%H%M%S) \
   --epochs 50 \
   --batch-size 128 \
@@ -242,7 +242,7 @@ done
 ### C-MAPSS FD004 实验
 
 ```bash
-cd /root/autodl-tmp
+cd /root/autodl-tmp/new_work
 
 TMPDIR=/tmp CUDA_VISIBLE_DEVICES=0 python -u code/run_experiment.py \
   --dataset cmapss_fd004 \
@@ -253,8 +253,8 @@ TMPDIR=/tmp CUDA_VISIBLE_DEVICES=0 python -u code/run_experiment.py \
   --history-len 50 \
   --pred-len 10 \
   --stride 1 \
-  --data-root /root/autodl-tmp/dataset \
-  --output-dir /root/autodl-tmp/result \
+  --data-root /root/autodl-tmp/new_work/dataset \
+  --output-dir /root/autodl-tmp/new_work/result \
   --run-id cmapss_fd004_kst_$(date +%Y%m%d_%H%M%S) \
   --epochs 80 \
   --batch-size 128 \
@@ -291,22 +291,22 @@ python -u code/run_experiment.py \
   --history-len 168 \
   --pred-len 24 \
   --stride 60 \
-  --data-root /root/autodl-tmp/dataset \
-  --output-dir /root/autodl-tmp/result \
+  --data-root /root/autodl-tmp/new_work/dataset \
+  --output-dir /root/autodl-tmp/new_work/result \
   --run-id reeval_$(date +%Y%m%d_%H%M%S) \
   --epochs 0 \
   --batch-size 128 \
   --nsamples 100 \
   --device cuda \
-  --checkpoint /root/autodl-tmp/result/某次实验/checkpoints/.../checkpoint_seed2026_best.pt
+  --checkpoint /root/autodl-tmp/new_work/result/某次实验/checkpoints/.../checkpoint_seed2026_best.pt
 ```
 
 ### 风险校准重评估（不改模型，只改阈值策略）
 
 ```bash
 python -u code/evaluate_risk_calibration.py \
-  --run-dir /root/autodl-tmp/result/metropt3_chrono502030_kst_20260609_084658 \
-  --data-root /root/autodl-tmp/dataset \
+  --run-dir /root/autodl-tmp/new_work/result/metropt3_chrono502030_kst_20260609_084658 \
+  --data-root /root/autodl-tmp/new_work/dataset \
   --device cuda \
   --batch-size 128
 ```
@@ -314,7 +314,7 @@ python -u code/evaluate_risk_calibration.py \
 ### 构建结果表
 
 ```bash
-python code/build_tables.py --results-dir /root/autodl-tmp/result
+python code/build_tables.py --results-dir /root/autodl-tmp/new_work/result
 # 输出：result/tables/table1_*.csv ~ table7_*.csv
 ```
 
@@ -345,7 +345,7 @@ python -m pytest code/tests/test_experiment_framework.py -q
 ## 7. 稳定性护栏
 
 - 单个实验失败不能中断整批实验（`nohup` 或 `tmux` 独立运行）。
-- 单次 GPU 实例异常关机不能丢失已完成的结果（定期 `scp -P 39406 -r` 下载 result/ 到本地）。
+- 单次 GPU 实例异常关机不能丢失已完成的结果（定期 `scp -P 43676 -r` 下载 result/ 到本地）。
 - 缺失 mask 文件（`.npz`）在训练前固化，同一 seed+rate 固定复用，不重新生成。
 - 归一化统计量只能来自 train split，不能从 valid/test 泄露。
 - 风险阈值只能用 validation split 确定，不能用 test label 搜索。
@@ -378,8 +378,8 @@ git commit -m "<Phase X>: <改动摘要>"
 git push
 
 # ===== 2. AutoDL 服务器拉取最新代码 =====
-ssh -p 39406 root@connect.nmb1.seetacloud.com
-cd /root/autodl-tmp && source env.sh
+ssh -p 43676 root@connect.nmb2.seetacloud.com
+cd /root/autodl-tmp/new_work
 git pull
 
 # ===== 3. 跑实验 =====
@@ -387,15 +387,15 @@ nohup python -u code/run_experiment.py ... > logs/run.log 2>&1 &
 
 # ===== 4. 下载结果到本地 =====
 # 在 Mac 终端执行：
-scp -P 39406 -r root@connect.nmb1.seetacloud.com:/root/autodl-tmp/result/<最新run_id>/metrics/ ~/Downloads/
+scp -P 43676 -r root@connect.nmb2.seetacloud.com:/root/autodl-tmp/new_work/result/<最新run_id>/metrics/ ~/Downloads/
 ```
 
 ### 注意事项
 
 - `dataset/` 和 `result/` 已加入 `.gitignore`，**不会通过 git 传输**。
-- 数据集只需上传一次：`scp -P 39406 -r dataset/ root@connect.nmb1.seetacloud.com:/root/autodl-tmp/`
+- 数据集已随数据盘迁移至 `/root/autodl-tmp/new_work/dataset/`；新实例首次部署时 scp 到该路径：`scp -P 43676 -r dataset/ root@connect.nmb2.seetacloud.com:/root/autodl-tmp/new_work/`
 - 实验结果通过 `scp` 下载，不提交到 git。
-- 服务器首次 clone：`cd /root/autodl-tmp && git clone https://github.com/PY0909/KAFNet-ProFITi01.git .`
+- 服务器不需要 clone：git 仓库已随数据盘迁移至 `/root/autodl-tmp/new_work/`，`git pull` 即可同步代码。
 
 ### 提交示例
 

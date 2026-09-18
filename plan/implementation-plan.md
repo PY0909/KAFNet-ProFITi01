@@ -2969,13 +2969,15 @@ class WindowSufficientStats:
 
 #### Task CH3-S04-T01：运行 5 个点预测 baseline 的中心条件
 
-- [ ] dry-run 筛选 `track=point,family=baseline,condition_id=point_mixed_030`；预期 `expected=5,new=5`。
-- [ ] 在同一 AutoDL 环境依次运行 LI+TCN、FF+GRU、Masked TCN、GRU-D、ODE-RNN；单模型失败不停止其余模型。
-- [ ] 每个模型完整使用 train/validation，按最低 validation MAE 保存 best checkpoint，冻结后完整 test 一次。
-- [ ] validator 检查 `completed=5, nonfinite=0, fairness_mismatch=0, test_count_error=0`。
-- [ ] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。
+- [x] dry-run 筛选 `track=point,family=baseline,condition_id=point_mixed_030`；预期 `expected=5,new=5`。（AutoDL 与本机 dry-run 均 expected_total=5, expected_new=5）
+- [x] 在同一 AutoDL 环境依次运行 LI+TCN、FF+GRU、Masked TCN、GRU-D、ODE-RNN；单模型失败不停止其余模型。（同机 RTX 3090 一次会话连续完成 5/5，device=cuda，elapsed 570.9-724.0s/run，failed=[]）
+- [x] 每个模型完整使用 train/validation，按最低 validation MAE 保存 best checkpoint，冻结后完整 test 一次。（pilot_train_and_evaluate 按 best_valid 选择 checkpoint 并回载后再评估；5 个 manifest test_evaluation_count=1）
+- [x] validator 检查 `completed=5, nonfinite=0, fairness_mismatch=0, test_count_error=0`。（execute completed_count=5/failed=0；轴检查：预测全有限且非全零、protocol_sha/shared_artifacts/code_fingerprint 五 run 完全一致、realized_rate 0.297/0.301/0.304、test MAE 五模型互异 0.2389-0.3501；回传本机后 dry-run 验签 verified_complete=5, expected_new=0）
+- [x] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。（本轮 sanity 两模型均过：li_tcn init 0.9996→best 0.4013、ode_rnn init 4.0052→best 0.3985，均 < persistence raw floor 0.9159，beat_naive=true；ode_rnn 5 epoch 直接达标，无需 6-epoch 例外）
 
-**验收：** 5 个 baseline artifact 全部验签后，baseline-first gate 才允许本文模型运行。
+**验收：** 5 个 baseline artifact 全部验签后，baseline-first gate 才允许本文模型运行。 ✅
+
+**执行注记（2026-09-18）：** AutoDL RTX 3090（commit c535097，跨机 preflight `identity_sections_match`，环境 smoke ok）完成 5/5 baseline 中心条件。test MAE 排序：ff_gru 0.2389 < li_tcn 0.2605 < masked_tcn 0.2751 < ode_rnn 0.2989 < gru_d 0.3501，全部显著低于 persistence raw floor 0.9159。sanity 同时纳入 ODE-RNN，满足 2026-09-17 修订登记（2956 行）的纳入要求；grad clip=1.0 下 ODE-RNN 未复现发散（test 0.2989，sanity best 0.3985）。产物已回传本机 `result/pilot/metropt3/runs|sanity/` 并通过 dry-run 验签与轴差异化复核（2026-09-14 教训项：五 model_id 互异、fairness SHA 一致、指标跨模型有差异）。
 
 #### Task CH3-S04-T02：运行 KST-Light Linear/MLP 中心条件
 
