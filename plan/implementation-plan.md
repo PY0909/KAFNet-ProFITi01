@@ -2950,15 +2950,15 @@ class WindowSufficientStats:
 
 - [x] 只在 `mixed@0.30` 上运行 LI+TCN 的 5-epoch train/validation sanity，不访问 test target。（AutoDL GPU，device=cuda，sanity_epochs=5，test_evaluation_count=0）
 - [x] 保存 `run_level=sanity_train`，与完整 pilot key/目录隔离，不能被 resume 当作完整结果。（独立目录 `result/pilot/metropt3/sanity/`，非 `runs/`，resume 不扫描）
-- [x] 检查 loss 有限、参数发生更新、validation MAE 至少一次优于初始化模型，并与 data gate 的 history-only floor 比较。（finite=true、updated=true、validation_improved=true：init_valid_mae 0.9996 → best_valid_mae 0.3986；beat_naive=true，本机 data_gate 核对 0.3986 < persistence raw 0.9159，改善 56.5%）
-- [x] 若 learned model 完全不优于 best naive floor，则停止后续 GPU 调度，进入数据/优化诊断；不得为了过门禁读取 test。（不触发：best 0.3986 显著优于 best naive floor persistence 0.9159）
+- [x] 检查 loss 有限、参数发生更新、validation MAE 至少一次优于初始化模型，并与 data gate 的 history-only floor 比较。（finite=true、updated=true、validation_improved=true；当时的 raw 0.9159/56.5% 记录已作废。当前有效口径为 standardized masked-query persistence baseline；修正后 sanity 需重跑并重新生成 manifest）
+- [x] 若 learned model 完全不优于 best naive floor，则停止后续 GPU 调度，进入数据/优化诊断；不得为了过门禁读取 test。（原始 raw-space 56.5% 叙述已作废；修正后的 standardized masked-query gate 需由新 sanity manifest 重新确认）
 - [x] 若通过，登记固定优化器和训练预算；本轮不进行 learning-rate sweep 或模型特异调参。（固定 AdamW lr=1e-3 weight_decay=1e-4，5 epoch，batch 128）
   - **2026-09-17 修订登记：** 全局梯度裁剪 `grad_clip_norm=1.0` 补入固定训练配方。这不是新增科学配置，而是对齐仓库既有训练入口（`run_experiment.py`、`train_metropt_kaf_profiti.py`、`train_cmapss_kaf_profiti.py` 均为 clip=1.0）——首个 pilot runner 实现遗漏了它。证据：无裁剪时 adapted Euler ODE-RNN 在中心条件发散（梯度范数峰值 ~6.6e7，valid MAE 9.30 vs persistence floor 0.9159，20 epoch 最好 1.10 仍不达标）；clip=1.0 + lr 不变，6 epoch 即 valid MAE 0.747 越过 floor；lr=1e-4 对照更差，故 lr 保持 1e-3。裁剪统一作用于全部模型（baseline 与本文），不引入 per-model 差异；回归测试 `code/tests/pilot/test_grad_clipping.py` 钉死该配方（4 passed）。此次修订改变训练循环 → code SHA 变化，跨机 preflight 与 5-epoch sanity 须在新 commit 上重做，且下轮 sanity 应将 ODE-RNN 纳入（此前只跑 LI+TCN）。
 
 **验收：** `finite=true`、`updated=true`、`validation_improved=true` 后才能启动第三章完整 baseline。 ✅
 
-**执行注记：** 训练曲线健康（train_loss 0.50→0.22 单调下降；valid 0.9996→0.3986，epoch 3 轻微波动后恢复，无过拟合）。`naive_floor.available=false` 与 `beat_naive=null` 出现在 AutoDL manifest 是因为 `data_gate.json` 为本机诊断产物（`result/` 不进 git、未同步到 AutoDL）；beat_naive 判定已在本机用 `result/pilot/metropt3/diagnostics/data_gate.json` 核对为 true。协议身份 split_sha256=`eb7b957c…` 与 T01 跨机一致。
-  - **2026-09-18 口径更正：** 上文 beat_naive 引用的 persistence raw 0.9159 为 raw 物理空间基准，与本仓库 run 指标的 standardized 空间（train-split z-score）不匹配——"改善 56.5%"作废。正确基准为 persistence `std_micro` MAE=0.4024，本条目真实改善为 ode_rnn +1.0%、li_tcn +0.3%（5 epoch 触及 floor）；三标志门禁结论不变。完整口径声明见 `plan/CH3-S04-go-no-go.md`；runner 的 beat_naive 比较基准修正（raw→std_micro）已列为待办，不得在 CH3-S05 run 进行中插入。
+**执行注记（历史记录，已由 2026-09-18 更正取代）：** 当时记录的 raw floor 与 56.5% 改善不能用于当前 gate。当前 sanity baseline 必须由 validation loader 按 standardized masked-query micro 契约计算；data_gate 的 raw/all-query floor 仅作参考。协议身份 split_sha256=`eb7b957c…` 与 T01 跨机一致。
+  - **2026-09-18 口径更正：** 上文 beat_naive 引用的 persistence raw 0.9159 为 raw 物理空间基准，与本仓库 run 指标的 standardized 空间（train-split z-score）不匹配——"改善 56.5%"作废。按 data_gate `std_micro` 参考值粗估的改善为 ode_rnn +1.0%、li_tcn +0.3%（5 epoch 触及 floor；跨口径指示值）。完整口径声明见 `plan/CH3-S04-go-no-go.md`；runner 的 beat_naive 基准已在 2026-09-18 代码窗口修正为同一 validation loader 的 standardized masked-query LOCF persistence，旧 sanity manifest 在修正 commit 上重跑并重新生成前不作为现行 gate 证据。
 
 ---
 
@@ -2974,7 +2974,7 @@ class WindowSufficientStats:
 - [x] 在同一 AutoDL 环境依次运行 LI+TCN、FF+GRU、Masked TCN、GRU-D、ODE-RNN；单模型失败不停止其余模型。（同机 RTX 3090 一次会话连续完成 5/5，device=cuda，elapsed 570.9-724.0s/run，failed=[]）
 - [x] 每个模型完整使用 train/validation，按最低 validation MAE 保存 best checkpoint，冻结后完整 test 一次。（pilot_train_and_evaluate 按 best_valid 选择 checkpoint 并回载后再评估；5 个 manifest test_evaluation_count=1）
 - [x] validator 检查 `completed=5, nonfinite=0, fairness_mismatch=0, test_count_error=0`。（execute completed_count=5/failed=0；轴检查：预测全有限且非全零、protocol_sha/shared_artifacts/code_fingerprint 五 run 完全一致、realized_rate 0.297/0.301/0.304、test MAE 五模型互异 0.2389-0.3501；回传本机后 dry-run 验签 verified_complete=5, expected_new=0）
-- [x] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。（本轮 sanity 两模型均过：li_tcn init 0.9996→best 0.4013、ode_rnn init 4.0052→best 0.3985，均 < persistence std_micro floor 0.4024——beat_naive 代码当时以 raw 0.9159 判 true，口径更正见 T03 报告；ode_rnn 5 epoch 已触 floor，无需 6-epoch 例外）
+- [x] 至少一个 learned baseline 必须在 validation 上优于 best naive floor；否则保持 Phase 未勾选并先诊断。（本轮 sanity 旧 manifest 的 raw-space `beat_naive` 已作废；正式 run 的 valid floor 使用 standardized data-gate 参考，sanity gate 以修正后的 loader baseline 为准）
 
 **验收：** 5 个 baseline artifact 全部验签后，baseline-first gate 才允许本文模型运行。 ✅
 
@@ -3000,7 +3000,7 @@ class WindowSufficientStats:
 - [x] 只给出 `go/fix/stop` 诊断，不报告 mean±std、置信区间、显著性或“证明优于”。（结论 go，单种子边界已在报告声明）
 - [x] 只有 `go` 才进入 CH3-S05；`fix` 必须通过 validation-only 重跑，旧 run 保留但不得混入新矩阵。（go，无需 fix；遗留项：beat_naive 比较基准 raw→std_micro 修正排入下一代码窗口）
 
-**验收：** 中心条件证明 MetroPT 协议可学习且全模型比较口径一致。 ✅ 报告：`plan/CH3-S04-go-no-go.md`（2026-09-18，结论 go）
+**验收：** 中心条件单种子 pilot 显示存在可优化信号，且全模型比较口径一致；这支持进入 CH3-S05，不构成 MetroPT 协议的一般性可学习性或多 seed formal 证明。 ✅ 报告：`plan/CH3-S04-go-no-go.md`（2026-09-18，结论 go）
 
 ---
 

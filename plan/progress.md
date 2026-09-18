@@ -839,9 +839,9 @@
 - 实现：新增 `pilot_sanity_train`（5-epoch train/valid，不接触 test）与 `PilotRunner.run_sanity_train`（选 point li_tcn@point_mixed_030，独立目录 `sanity/`，manifest `run_level=sanity_train` + `test_evaluation_count=0`，不写 prediction/checkpoint）；CLI 增加 `--mode sanity --epochs`。4 项新测试。
 - 执行：AutoDL GPU（device=cuda）跑 `--mode sanity --epochs 5`，产物 `result/pilot/metropt3/sanity/`。
 - 验收结果：`finite=true`、`updated=true`、`validation_improved=true`；init_valid_mae 0.9996 → best_valid_mae 0.3986（epoch 5）；train_loss 0.50→0.22 单调下降，valid 无过拟合；test_evaluation_count=0；协议 split_sha256=`eb7b957c…` 与 T01 一致。
-- naive floor 比较：best_valid_mae 0.3986（raw 掩蔽位置）< data_gate persistence raw 0.9159（valid 全 query 位置），beat_naive=true，改善 56.5%。AutoDL manifest 中 `naive_floor.available=false`/`beat_naive=null` 系 `data_gate.json` 为本机诊断产物未同步所致；判定已在本机用 `result/pilot/metropt3/diagnostics/data_gate.json` 核对为 true。
+- naive floor 比较（历史口径，已作废）：旧记录把 standardized masked-query valid MAE 与 data_gate raw all-query floor 混比，并给出 56.5%；当前有效 gate 必须使用同一 validation loader 的 standardized masked-query persistence baseline。受影响 sanity 需在修正代码后重跑；不把旧 `beat_naive` 当作现行证据。
 - 固定优化器/预算：AdamW lr=1e-3 weight_decay=1e-4、5 epoch、batch 128；本轮无 lr sweep、无模型特异调参。
-- 结论：中心条件 MetroPT 协议可学习（5 epoch 内 li_tcn 即超越 best naive persistence 56.5%），学习门禁通过，可进入 CH3-S04 第三章 baseline。Phase CH34-S03 勾选。
+- 结论：中心条件单种子 pilot 显示存在可优化信号（不构成一般性“协议可学习”证明），学习门禁的三项训练标志通过；在修正后的 persistence 契约验证前，不把历史 `beat_naive` 数值作为独立结论。Phase CH34-S03 的 smoke/sanity readiness 记录保留，但需标注 gate 口径待修正。
 
 ### Capability-use audit
 
@@ -852,17 +852,17 @@
 - Artifacts produced：`pilot_sanity_train`/`run_sanity_train`、`--mode sanity --epochs`、`test_pilot_sanity_train.py`（4 项）、AutoDL sanity manifest/history。
 - Verification run：本机全量 318 passed（含 4 新测试）；49-key dry-run 不变；本机 CPU epochs=1 wiring 通过（三标志 true、beat_naive true）；AutoDL GPU epochs=5 正式通过。
 - Review result：T02 验收三项通过；Phase CH34-S03 闭合（T01+T02）。
-- Remaining risk：`data_gate.json` 尚未同步到 AutoDL（进入 CH3-S04 前建议作为环境准备 scp/生成，使 sanity/正式 run 的 naive floor 比较自包含）；CH3-S04 及后续 Phase 未执行。
+- Remaining risk（历史记录，已由后续修复计划取代）：data_gate 同步风险已不再是当前主问题；现行待办是修正并重跑 sanity 的 standardized masked-query persistence gate，再更新其 manifest 与证据索引。CH3-S04 正式结果与 sanity gate 分开记录。
 
 ## 2026-09-18 CH3-S04 中心条件 7/7 闭合与 go/no-go（结论 go）
 
 - 阶段：S4 Reconstruction / CH3-S04 T01+T02+T03 全部完成，Phase CH3-S04 关闭。
 - 执行：AutoDL 有卡（RTX 3090，commit `c535097`，跨机 preflight `identity_sections_match` + 环境 smoke ok；实例 2026-09-17 更换为 nmb2:43676，仓库/数据集随数据盘位于 `/root/autodl-tmp/new_work`）。T01 5 baseline（elapsed 570.9-724.0s/run）、T02 KST-Light linear/mlp（695.8/699.2s），均 device=cuda 单会话完成；sanity 先行并纳入 ODE-RNN（li_tcn+ode_rnn 各 5 epoch），满足 2026-09-17 修订登记。
 - 验收结果：T01 validator completed=5/failed=0；T02 completed=2/failed=0 且 baseline-first gate 放行；7-run 轴差异化检查通过（model_id 互异、protocol_sha/shared_artifacts/code_fingerprint 完全一致、realized_rate 0.297/0.301/0.304、7 个 MAE 互异、预测有限且非全零）；产物回传本机后 dry-run 验签 verified_complete=7 / expected_new=0。
-- 结果要点：validation 最优 kst_light|mlp 0.2777（vs naive `std_micro` floor 0.4024，+31.0%，全场最优，压过最强 baseline ff_gru 0.2819）；test 最优 ff_gru 0.2389（vs test floor 0.4786，+50.1%）；7/7 低于 test floor，6/7 低于 valid floor（gru_d −0.6% 未过，判为该 baseline 收敛慢的真实属性）。go/no-go 诊断：**go**，报告 `plan/CH3-S04-go-no-go.md`（主表/逐通道/效率/病理四项）。
-- 口径更正（重要）：发现本仓库 run 指标为 standardized 空间（train-split z-score），CH34-S03-T02 记录的 beat_naive raw 基准（0.9159 / "改善 56.5%"）作废——正确基准 `std_micro` 0.4024，sanity 真实改善 +1.0%/+0.3%（5 epoch 触及 floor），三标志门禁结论不变。已在 implementation-plan CH34-S03-T02 追加更正登记；`pilot_runner.py` 的 beat_naive 基准修正（raw→std_micro）列为待办，不得在 CH3-S05 run 进行中插入。
+- 结果要点：validation 最低为 kst_light|mlp 0.2777（相对 formal naive `std_micro` floor 0.4024，+31.0%，本单种子观察值）；test 最优 ff_gru 0.2389（+50.1%）；7/7 低于 test floor，6/7 低于 valid floor（gru_d −0.6% 未过）。go/no-go 是继续单种子扩展的工程诊断，不作模型优越性或统计显著性结论。
+- 口径更正（重要）：CH34-S03-T02 的 beat_naive raw 基准（0.9159 / “改善 56.5%”）作废。正式 run 的 data-gate `std_micro` floor 仅用于 formal all-query 比较；sanity gate 已改为同一 validation loader 的 standardized masked-query persistence baseline。受影响 sanity 需重跑并更新 manifest；七个正式中心条件 artifact 不变。
 - 病理四项检查通过（无近零预测、无持续恶化——ode_rnn epoch 13 后退化由 best_valid checkpoint 兜底、无单通道支配 0.18-0.19、timing 同机可比）；val/test 排名扰动按单种子噪声处理，不做模型优劣声明。
-- 结论：中心条件协议可学习、全模型比较口径一致，进入 CH3-S05（42-run 缺失强度/机制单种子扩展）。
+- 结论：中心条件 pilot 显示存在可优化信号、全模型比较口径一致，进入 CH3-S05 的单种子扩展；这不关闭 D3-D5 formal stage gates，也不构成多 seed 模型优越性结论。
 
 ### Capability-use audit
 

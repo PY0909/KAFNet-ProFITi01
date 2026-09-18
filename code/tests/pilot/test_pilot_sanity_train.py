@@ -11,6 +11,7 @@ import yaml
 
 from kaf_profiti.experiments.pilot_runner import (
     PilotRunner,
+    _persistence_score,
     build_model,
     load_matrix,
     pilot_sanity_train,
@@ -128,6 +129,35 @@ def _runner(tmp_path):
     )
 
 
+def test_persistence_score_uses_masked_query_micro_contract():
+    batch = _make_batch(2, 3, 2, 1, 1, seed=11)
+    batch.X_obs[:, -1, :] = torch.tensor([[1.0, 2.0]])
+    batch.Y_q = torch.tensor([[[1.5, 2.5], [100.0, 200.0]]])
+    batch.y_flat = batch.Y_q.reshape(1, -1)
+    batch.mq_flat = torch.tensor([[1.0, 1.0, 0.0, 0.0]])
+    score = _persistence_score(_ListLoader([batch]), "cpu")
+
+    assert score["metric_space"] == "standardized"
+    assert score["aggregation"] == "masked_query_micro"
+    assert score["valid_count"] == 2
+    assert score["value"] == pytest.approx(0.5)
+
+
+def test_persistence_score_uses_locf_not_zero_filled_history():
+    """A masked last history step must fall back to the last observed value."""
+
+    batch = _make_batch(2, 3, 2, 1, 1, seed=11)
+    batch.X_obs = torch.tensor([[[5.0, 6.0], [7.0, 0.0], [0.0, 9.0]]])
+    # masks.py zero-fills masked history; channel 0's last step is masked.
+    batch.M_obs = torch.tensor([[[1.0, 1.0], [1.0, 1.0], [0.0, 1.0]]])
+    batch.Y_q = torch.tensor([[[8.0, 9.0], [7.0, 9.0]]])
+    batch.y_flat = batch.Y_q.reshape(1, -1)
+    batch.mq_flat = torch.ones(1, 4)
+    score = _persistence_score(_ListLoader([batch]), "cpu")
+
+    # LOCF persistence = [7, 9, 7, 9]; zero-filled last row would give [0, 9, 0, 9].
+    assert score["valid_count"] == 4
+    assert score["value"] == pytest.approx(0.25)
 def test_sanity_trainer_runs_validation_only_and_reports_flags(tmp_path):
     """The sanity trainer scores init + N epochs and never loads test."""
 
@@ -164,6 +194,10 @@ def test_run_sanity_train_selects_li_tcn_and_writes_isolated_manifest(tmp_path):
     assert manifest["finite"] is True
     assert manifest["updated"] is True
     assert isinstance(manifest["validation_improved"], bool)
+    assert manifest["persistence_baseline"]["metric_space"] == "standardized"
+    assert manifest["persistence_baseline"]["aggregation"] == "masked_query_micro"
+    assert manifest["persistence_baseline"]["valid_count"] > 0
+    assert manifest["beat_naive"] is not None
 
     # Isolated under sanity/, never under runs/.
     sanity_dir = tmp_path / "result" / "pilot" / "metropt3" / "sanity" / key

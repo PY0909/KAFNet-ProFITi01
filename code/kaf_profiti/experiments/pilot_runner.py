@@ -15,8 +15,10 @@ import inspect
 import json
 import math
 import re
+import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -113,6 +115,33 @@ class PilotMatrix:
     @property
     def name(self) -> str:
         return self.track + "_matrix"
+
+
+def _git_provenance(project_root: Path) -> Dict[str, object]:
+    """Return portable Git identity for newly generated runtime manifests."""
+
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit_sha": None, "clean": None, "dirty_file_count": None}
+    return {
+        "commit_sha": commit or None,
+        "clean": not dirty,
+        "dirty_file_count": len(dirty),
+    }
 
 
 def load_matrix(path) -> PilotMatrix:
@@ -542,6 +571,67 @@ def _inference_timing_repeats(model, loader, device, track, nsamples, repeats=3)
             _synchronize(device)
             timings.append(time.perf_counter() - start)
     return timings
+
+
+def _masked_point_score(prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> tuple[float, float]:
+    """Return finite masked absolute-error sum/count in standardized space."""
+
+    valid = (mask > 0) & target.isfinite() & prediction.isfinite()
+    error = torch.where(valid, prediction - target, torch.zeros_like(prediction))
+    return float(error.abs().sum()), float(valid.sum())
+
+
+def _persistence_forecast(batch) -> torch.Tensor:
+    """Last observed value per channel carried forward across the query horizon.
+
+    History masking zero-fills ``X_obs`` (``masks.py`` multiplies by the mask),
+    so the last row is not necessarily the last *observed* value; LOCF walks
+    back through ``M_obs`` per channel. Channels with no observation in the
+    window fall back to the standardized zero.
+    """
+
+    history = batch.X_obs
+    observed = batch.M_obs > 0
+    batch_size, history_len, num_sensors = history.shape
+    steps = torch.arange(history_len, device=history.device).view(1, history_len, 1)
+    step_grid = steps.expand(batch_size, history_len, num_sensors)
+    last_observed_step = torch.where(observed, step_grid, torch.zeros_like(step_grid))
+    last_observed_step = last_observed_step.max(dim=1).values.unsqueeze(1)  # (B, 1, C)
+    last_value = torch.gather(history, 1, last_observed_step).squeeze(1)  # (B, C)
+    last_value = torch.where(
+        observed.any(dim=1), last_value, torch.zeros_like(last_value)
+    )
+    pred_len = batch.Y_q.shape[1]
+    return (
+        last_value.unsqueeze(1)
+        .expand(batch_size, pred_len, num_sensors)
+        .reshape(batch_size, -1)
+    )
+
+
+def _persistence_score(loader, device) -> Dict[str, object]:
+    """Score LOCF persistence with the validation metric contract."""
+
+    total, count = 0.0, 0.0
+    for batch in loader:
+        batch = _batch_to_device(batch, device)
+        persistence = _persistence_forecast(batch)
+        batch_sum, batch_count = _masked_point_score(
+            persistence, batch.y_flat, batch.mq_flat
+        )
+        total += batch_sum
+        count += batch_count
+    return {
+        "value": total / count if count > 0 else None,
+        "valid_count": int(count),
+        "metric_space": "standardized",
+        "aggregation": "masked_query_micro",
+        "mask_rule": (
+            "mq_flat > 0 and finite target/prediction; persistence is LOCF via "
+            "M_obs (zero-filled masked history is not treated as observed)"
+        ),
+        "source": "validation_loader_persistence",
+    }
 
 
 def _valid_score(model, loader, device, track, nsamples: int = 20):
@@ -1477,6 +1567,8 @@ class PilotRunner:
             },
             "test_evaluation_count": 1 if status == "completed" else 0,
             "code_fingerprint": self.code_fingerprint,
+            "git_provenance": _git_provenance(self.project_root),
+            "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
             "checkpoint_sha256": (
                 _sha256_file(run_dir / "checkpoint.pt")
                 if status == "completed" and (run_dir / "checkpoint.pt").exists()
@@ -1633,8 +1725,8 @@ class PilotRunner:
             "persistence_mae_std_micro": persistence.get("std_micro", {}).get("mae"),
             "learnability_gate": gate.get("learnability_gate", {}).get("result"),
             "note": (
-                "data_gate floors aggregate every query position; sanity valid_mae "
-                "aggregates masked query positions only (mixed@0.30, expected close)."
+                "data_gate floors are retained as all-query diagnostic references; the "
+                "sanity beat_naive gate uses its validation-loader persistence baseline."
             ),
         }
 
@@ -1686,9 +1778,10 @@ class PilotRunner:
             model, loaders, spec, provider, device=self.device, epochs=epochs
         )
         naive_floor = self._naive_floor_reference()
+        persistence = _persistence_score(loaders["valid"], self.device)
         beat_naive = (
-            outcome["best_valid_mae"] < naive_floor["persistence_mae_raw"]
-            if naive_floor.get("available")
+            outcome["best_valid_mae"] < persistence["value"]
+            if persistence["value"] is not None
             else None
         )
         run_dir = self._sanity_dir() / spec.key
@@ -1706,6 +1799,8 @@ class PilotRunner:
             "protocol_sha": protocol_sha,
             "shared_artifacts": self._shared_artifacts(),
             "code_fingerprint": self.code_fingerprint,
+            "git_provenance": _git_provenance(self.project_root),
+            "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
             "sanity_epochs": outcome["epochs_run"],
             "finite": outcome["finite"],
             "updated": outcome["updated"],
@@ -1714,6 +1809,7 @@ class PilotRunner:
             "best_valid_mae": outcome["best_valid_mae"],
             "best_epoch": outcome["best_epoch"],
             "naive_floor": naive_floor,
+            "persistence_baseline": persistence,
             "beat_naive": beat_naive,
             "test_evaluation_count": 0,
         }
