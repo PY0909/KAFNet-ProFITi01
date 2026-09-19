@@ -16,6 +16,7 @@ import json
 import math
 import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -744,6 +745,34 @@ def _test_prediction_artifact(
     return metrics_from_prediction_payload(payload), payload
 
 
+def _model_class_name(model) -> str:
+    return f"{model.__class__.__module__}.{model.__class__.__qualname__}"
+
+
+def _model_config(model, spec: PilotRunSpec) -> Dict[str, object]:
+    return {
+        "model_class": _model_class_name(model),
+        "model_id": spec.model_id,
+        "head_type": spec.head_type,
+        "num_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
+        "hidden_dim": spec.hidden_dim,
+        "pred_len": spec.pred_len,
+        "batch_size": spec.batch_size,
+    }
+
+
+def _optimizer_config() -> Dict[str, object]:
+    return {
+        "class": "torch.optim.AdamW",
+        "lr": 1e-3,
+        "weight_decay": 1e-4,
+        "grad_clip_norm": GRAD_CLIP_NORM,
+    }
+
+
+def _training_command_hash() -> str:
+    command = " ".join(sys.argv)
+    return hashlib.sha256(command.encode("utf-8")).hexdigest()
 def pilot_train_and_evaluate(model, loaders, spec: PilotRunSpec, provider, device: str = "cpu") -> Dict[str, object]:
     """Default full pilot trainer: validation-selected checkpoint, one test.
 
@@ -788,6 +817,10 @@ def pilot_train_and_evaluate(model, loaders, spec: PilotRunSpec, provider, devic
         "checkpoint_bytes": checkpoint_bytes,
         "predictions": predictions,
         "train_time_sec": train_time,
+        "model_class": _model_class_name(model),
+        "model_config": _model_config(model, spec),
+        "optimizer_config": _optimizer_config(),
+        "training_command_hash": _training_command_hash(),
         "checkpoint_selection": "best_valid",
         "valid_selection_score": best_score,
         "device": str(device),
@@ -860,6 +893,10 @@ def pilot_sanity_train(
         "updated": bool(updated),
         "validation_improved": bool(best_valid_mae < init_valid_mae),
         "train_time_sec": train_time,
+        "model_class": _model_class_name(model),
+        "model_config": _model_config(model, spec),
+        "optimizer_config": _optimizer_config(),
+        "training_command_hash": _training_command_hash(),
         "epochs_run": epochs,
         "device": str(device),
     }
@@ -1069,6 +1106,17 @@ class PilotRunner:
             num_workers = 4 if torch.cuda.is_available() else 0
         self.num_workers = int(num_workers)
         self.matrices = list(matrices)
+
+    def _preflight_sha(self) -> Optional[str]:
+        environment_dir = self.result_root / self.pilot_root / "environment"
+        candidates = (
+            environment_dir / "autodl-preflight.json",
+            environment_dir / "local-preflight.json",
+        )
+        for path in candidates:
+            if path.is_file():
+                return _sha256_file(path)
+        return None
 
     # -- expansion ----------------------------------------------------------
 
@@ -1569,6 +1617,11 @@ class PilotRunner:
             "code_fingerprint": self.code_fingerprint,
             "git_provenance": _git_provenance(self.project_root),
             "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "model_class": outcome.get("model_class") if outcome else None,
+            "model_config": outcome.get("model_config") if outcome else None,
+            "optimizer_config": outcome.get("optimizer_config") if outcome else None,
+            "training_command_hash": outcome.get("training_command_hash") if outcome else None,
+            "environment_preflight_sha": self._preflight_sha(),
             "checkpoint_sha256": (
                 _sha256_file(run_dir / "checkpoint.pt")
                 if status == "completed" and (run_dir / "checkpoint.pt").exists()
@@ -1801,6 +1854,11 @@ class PilotRunner:
             "code_fingerprint": self.code_fingerprint,
             "git_provenance": _git_provenance(self.project_root),
             "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "model_class": outcome.get("model_class") if outcome else None,
+            "model_config": outcome.get("model_config") if outcome else None,
+            "optimizer_config": outcome.get("optimizer_config") if outcome else None,
+            "training_command_hash": outcome.get("training_command_hash") if outcome else None,
+            "environment_preflight_sha": self._preflight_sha(),
             "sanity_epochs": outcome["epochs_run"],
             "finite": outcome["finite"],
             "updated": outcome["updated"],

@@ -25,11 +25,41 @@ All 30 baseline run directories passed the downloaded-artifact audit:
 - realized rates match the registered conditions: random 0/30/70, low-rate 30, block-offline 30, and mixed 30;
 - no duplicate metrics or prediction artifact SHA exists across distinct model/condition keys.
 
-`random_000` LI-TCN and Masked-TCN share history/checkpoint SHA because at zero missingness their input transforms are mathematically equivalent under the same seed; their metrics and predictions remain distinct, and all nonzero-missingness conditions differ.
-
 ## Provenance caveat
 
-The reused CH3-S04 mixed runs carry the historical code fingerprint `f44952ed…`; the 25 new runs carry `fdd06602…` from commit `2b47c07`. This is expected and documented in `plan/pilot-evidence-index.md`: the code delta is limited to sanity-gate and manifest provenance paths and does not alter formal train/validation/test execution. Some historical manifests lack embedded Git provenance; new runs record it. This is an auditability caveat, not a demonstrated metric defect.
+The reused CH3-S04 mixed runs carry the historical code fingerprint `f44952ed…`; the 25 new runs carry `fdd06602…` from commit `2b47c07`. The code delta is limited to sanity-gate and manifest provenance paths and does not alter formal train/validation/test execution. Some historical manifests lack embedded Git provenance; new runs record it. This is an auditability caveat, not a demonstrated metric defect.
+
+Future manifests additionally record `model_class`, `model_config`, `optimizer_config`, `training_command_hash`, and `environment_preflight_sha` so a run's model identity and recipe no longer depend on checkpoint binaries alone. The existing 30 runs predate those fields and must not be re-signed; checkpoint payloads stay `state_dict`-only and the scientific results are unchanged.
+
+## LI-TCN vs Masked-TCN at `point_random_000`
+
+The two runs share identical `history.json` and `checkpoint.pt` bytes. Investigation found no evidence of a shared/misassigned checkpoint:
+
+- both checkpoints are `state_dict`-only with identical tensor key sets and zero differing tensors;
+- model classes are distinct (`LITCNPoint` vs `MaskedTCNPoint`), tested in `code/tests/pilot/test_pilot_model_identity.py`;
+- at 0% history missingness both encoders receive the same effective input (interpolation fill and `X_obs * M_obs` both reduce to `X_obs`), with identical architecture, parameter count, and seed;
+- all five nonzero-missingness conditions differ between the two models.
+
+This is an expected degenerate-equivalence sanity check, not a defect.
+
+## Mask semantics
+
+The `mask` field in point `predictions.json` is the query/evaluation-validity mask, not the history input mask. For this MetroPT point protocol it is all ones because every query target is valid; `mask_allones=true` does **not** mean a random, low-rate, block-offline, or mixed condition had no history missingness.
+
+To compare error on observed versus missing history points, use `manifest.json` → `protocol_sha.mask_sha.{train,valid,test}` to locate the protocol mask bundle and reconstruct the input history mask. Never use `predictions.json["mask"]` for that analysis.
+
+## Point metadata semantics
+
+For `track=point`, `manifest.nsamples=20` is the matrix's shared configuration field, while `predictions.json.nsamples=null` is intentional because no sample ensemble is emitted. For probabilistic runs, `predictions.json.nsamples` must equal the manifest value. Validators must branch on `track` rather than require literal equality for point runs.
+
+## ODE-RNN `point_mixed_030` boundary
+
+The ODE-RNN `point_mixed_030` run is artifact-valid and finite, but its validation history contains large spikes (max ≈13.96 vs best ≈0.355) and late degradation, and residual analysis shows heavy-tail/extreme-prediction pathology (extreme predictions tens of σ, high kurtosis). It is retained as a diagnostic baseline, **not** as evidence of numerically stable training.
+
+- T02 may proceed without rerunning it;
+- T03 must expose `instability_flag`, `best_epoch`, `max_residual_or_prediction`, and `valid_spike`/late-degradation status, and label the run `numerically finite but stability-risk / heavy-tail pathology`;
+- before multi-seed formal evaluation, decide whether to add gradient diagnostics, compare clip/no-clip, verify input scaling, test a registered stabilization policy, or reclassify ODE-RNN as diagnostic-only;
+- no post-hoc clipping or recipe change is permitted in the current single-seed result.
 
 ## T01 disposition
 

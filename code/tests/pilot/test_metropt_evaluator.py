@@ -12,6 +12,7 @@ from kaf_profiti.experiments.evaluator import (
     evaluate_batches,
     metrics_from_prediction_payload,
     validate_artifact_manifest,
+    validate_prediction_metadata,
     write_prediction_artifact,
 )
 
@@ -56,6 +57,30 @@ def test_probability_metrics_use_same_samples_and_interval_level():
     assert result["crps"] == pytest.approx(0.5)
     assert result["picp"] == pytest.approx(1.0)
     assert result["mpiw"] == pytest.approx(0.95, abs=1e-6)
+
+
+def test_point_nsamples_null_and_probabilistic_nsamples_match_manifest():
+    point_manifest = {"track": "point", "interval_level": 0.95, "nsamples": 20}
+    validate_prediction_metadata(
+        point_manifest,
+        {"track": "point", "interval_level": 0.95, "nsamples": None},
+    )
+    with pytest.raises(ValueError, match="point prediction"):
+        validate_prediction_metadata(
+            point_manifest,
+            {"track": "point", "interval_level": 0.95, "nsamples": 20},
+        )
+
+    probabilistic_manifest = {"track": "probabilistic", "interval_level": 0.95, "nsamples": 20}
+    validate_prediction_metadata(
+        probabilistic_manifest,
+        {"track": "probabilistic", "interval_level": 0.95, "nsamples": 20},
+    )
+    with pytest.raises(ValueError, match="nsamples"):
+        validate_prediction_metadata(
+            probabilistic_manifest,
+            {"track": "probabilistic", "interval_level": 0.95, "nsamples": None},
+        )
 
 
 def test_prediction_artifact_round_trip_and_content_sha(tmp_path):

@@ -3010,15 +3010,15 @@ class WindowSufficientStats:
 
 #### Task CH3-S05-T01：运行 baseline 的其余 5 个条件
 
-- [x] **Task CH3-S05-T01 完成：5 个 baseline 覆盖 6 个中心/扩展条件，共 30/30 个有效 run**（2026-09-18：复用 CH3-S04 `point_mixed_030` 的 5 个 baseline，新增 random 0/30/70、low-rate 30、block-offline 30 各 25 个 run；下载归档审计确认 30/30 manifest/artifact SHA、history、condition axis 和 target schema 全通过。新 run 使用 commit `2b47c07`；旧 mixed run 保留原始 fingerprint 并在 evidence index 中区分）
+- [x] **Task CH3-S05-T01 完成：5 个 baseline 覆盖 6 个中心/扩展条件，共 30/30 个有效 run**（2026-09-18：复用 CH3-S04 `point_mixed_030` 的 5 个 baseline，新增 random 0/30/70、low-rate 30、block-offline 30 各 25 个 run；下载归档审计确认 30/30 manifest/artifact SHA、history、condition axis 和 target schema 全通过。新 run 使用 commit `2b47c07`；旧 mixed run 保留原始 fingerprint 并在 evidence index 中区分。ODE-RNN mixed_030 标记为 numerically finite but stability-risk / heavy-tail pathology；不阻塞 T02，需在 T03 暴露 instability flag）
 
 **验收：** baseline 30/30 全部完成，且 manifest/artifact SHA、history 有限性、mask/realized-rate 条件轴、target schema 与模型 identity 检查通过；允许调度本文模型剩余条件。✅
 
-#### Task CH3-S05-T02：运行 KST-Light 的其余 5 个条件
+- [ ] **Task CH3-S05-T02：运行 KST-Light 的其余 5 个条件**
 
 - [ ] gate 核对 30/30 baseline 完整且共享协议；预期 `2 heads * 5 remaining conditions = 10` 个新 run。
 - [ ] 依次运行 Linear 和 MLP，各自覆盖 random 0/30/70、low-rate 30、block-offline 30；mixed 30 复用 CH3-S04。
-- [ ] 所有条件保持同 encoder、训练预算、checkpoint selector 和 evaluator。
+- [ ] 所有条件保持同 encoder、训练预算、checkpoint selector 和 evaluator；ODE-RNN 等 baseline 的稳定性风险只作为诊断标签传递，不因单种子异常事后改配方或重写 baseline 结果。
 - [ ] validator 检查 ours 累计 `12/12`、point 总计 `42/42`、duplicate/orphan/missing 均为 0。
 - [ ] 核对 random 30 在 intensity/mechanism 两个视图指向同一 scientific key 和 run artifact。
 
@@ -3034,9 +3034,9 @@ class WindowSufficientStats:
 - 输出：`result/pilot/metropt3/summary/point_efficiency.csv`
 
 - [ ] 强度表只含 random 0/30/70；机制表只含实际 30% 的四机制。
-- [ ] 输出原始单种子指标、相对 0% 退化率、逐通道指标和 provenance；不生成标准差或显著性。
+- [ ] 输出原始单种子指标、相对 0% 退化率、逐通道指标和 provenance；不生成标准差或显著性；同时对每个 run 输出 `instability_flag`、`best_epoch`、`max_residual_or_prediction`、`valid_spike`/late-degradation，并将 ODE-RNN mixed_030 标记为 `numerically finite but stability-risk / heavy-tail pathology`。
 - [ ] 效率表只读取同一 AutoDL GPU、FP32、相同 batch 与固定 warm-up/repeats 的 profile。
-- [ ] 输出测试断言 42 个 source keys 全部被消费，random 30 不重复训练，所有数字可从 prediction 重算。
+- [ ] 输出测试断言 42 个 source keys 全部被消费，random 30 不重复训练，所有数字可从 prediction 重算；point track 的 `predictions.nsamples=null` 视为合法，只有 probabilistic track 要求 `predictions.nsamples == manifest.nsamples`。
 - [ ] 将结论限制为“是否值得进入多 seed formal”及“下一步应修复哪里”。
 
 **验收：** 第三章单种子阶段闭合，但仍不能替代研究生论文最终多 seed 证据。

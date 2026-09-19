@@ -173,6 +173,29 @@ def write_prediction_artifact(path: Path, payload: Mapping[str, Any]) -> str:
     return artifact_sha256(path)
 
 
+def validate_prediction_metadata(manifest: Mapping[str, Any], payload: Mapping[str, Any], metrics: Optional[Mapping[str, Any]] = None) -> None:
+    """Validate track-specific prediction metadata contracts.
+
+    Point runs intentionally carry ``manifest.nsamples`` as the shared matrix
+    setting but emit no samples, so ``predictions.nsamples`` must be ``None``.
+    Probabilistic runs must emit the configured sample count.
+    """
+
+    track = manifest.get("track")
+    if payload.get("track") != track:
+        raise ValueError("prediction track does not match manifest")
+    if payload.get("interval_level") != manifest.get("interval_level"):
+        raise ValueError("prediction interval_level does not match manifest")
+    if track == "point":
+        if payload.get("nsamples") is not None:
+            raise ValueError("point prediction artifact must have nsamples=null")
+    elif track == "probabilistic":
+        if payload.get("nsamples") != manifest.get("nsamples"):
+            raise ValueError("probabilistic prediction nsamples does not match manifest")
+    else:
+        raise ValueError(f"unknown prediction track: {track!r}")
+    if metrics is not None and payload.get("parameter_count") != metrics.get("parameter_count"):
+        raise ValueError("prediction parameter_count does not match metrics")
 def validate_artifact_manifest(manifest: Mapping[str, Any], result_root: Path) -> None:
     """Validate relative artifact paths and content hashes for round-trips."""
     artifacts = manifest.get("artifacts", {})
