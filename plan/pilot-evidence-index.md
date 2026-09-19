@@ -45,7 +45,7 @@ The `c535097 → 2b47c07` code delta is limited to pilot sanity and manifest pro
 - `_git_provenance` and `generated_at_utc` — added manifest metadata fields only.
 - `_naive_floor_reference` note text — documentation wording only.
 
-`_train_one_epoch`, `_valid_score`, `_test_prediction_artifact`, `pilot_train_and_evaluate`, checkpoint selection, the evaluator, and all matrix/protocol identities are byte-identical between the two commits, so the seven CH3-S04 formal results are scientifically equivalent to runs that would be produced under `2b47c07`. The mixed@0.30 condition is therefore reused for CH3-S05 rather than retrained.
+The runner uses a scoped audited-fingerprint allowlist for resume/gating: `f44952ed…` is accepted only for completed `point_mixed_030` pilot runs, and `fdd06602…` only for completed baseline pilot runs. Identity, protocol, artifact SHA, checkpoint SHA, and test-count checks remain mandatory; arbitrary or tampered fingerprints are rejected. New T02 runs use the current fingerprint.
 
 ## Analysis mask semantics and stability boundary
 

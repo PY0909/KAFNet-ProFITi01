@@ -55,6 +55,14 @@ PROFILE_DATASETS = {
 # 0.747 within 6 epochs.
 GRAD_CLIP_NORM = 1.0
 
+# Historical formal artifacts whose train/evaluation code was audited as
+# equivalent to the current pilot execution path. These are scoped by run
+# level/condition below; arbitrary fingerprints must never bypass resume checks.
+LEGACY_CODE_FINGERPRINTS = {
+    "f44952ed50f6801b092b9a9e6f29d5c34b5519da6a55d24373c7ce2ac41571d1": "CH3-S04 mixed_030 formal runs",
+    "fdd06602a6f90de74da0c963d8d948d6040a8281f375d0949f1dad02eca6eb8d": "CH3-S05-T01 baseline runs",
+}
+
 _PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _CODE_FINGERPRINT_CACHE: Dict[str, tuple] = {}
 
@@ -745,6 +753,23 @@ def _test_prediction_artifact(
     return metrics_from_prediction_payload(payload), payload
 
 
+def _legacy_fingerprint_allowed(manifest: dict, spec: PilotRunSpec) -> bool:
+    """Allow only explicitly audited historical artifacts to resume."""
+
+    fingerprint = manifest.get("code_fingerprint")
+    if fingerprint not in LEGACY_CODE_FINGERPRINTS:
+        return False
+    if manifest.get("run_level") != "pilot" or manifest.get("status") != "completed":
+        return False
+    if manifest.get("key") != spec.key or manifest.get("run_id") != spec.key:
+        return False
+    if fingerprint == "f44952ed50f6801b092b9a9e6f29d5c34b5519da6a55d24373c7ce2ac41571d1":
+        return spec.condition_id == "point_mixed_030"
+    if fingerprint == "fdd06602a6f90de74da0c963d8d948d6040a8281f375d0949f1dad02eca6eb8d":
+        return spec.family == "baseline"
+    return False
+
+
 def _model_class_name(model) -> str:
     return f"{model.__class__.__module__}.{model.__class__.__qualname__}"
 
@@ -773,6 +798,8 @@ def _optimizer_config() -> Dict[str, object]:
 def _training_command_hash() -> str:
     command = " ".join(sys.argv)
     return hashlib.sha256(command.encode("utf-8")).hexdigest()
+
+
 def pilot_train_and_evaluate(model, loaders, spec: PilotRunSpec, provider, device: str = "cpu") -> Dict[str, object]:
     """Default full pilot trainer: validation-selected checkpoint, one test.
 
@@ -1336,7 +1363,8 @@ class PilotRunner:
             if artifact_shas.get("checkpoint") != expected_checkpoint_sha:
                 continue
             if manifest.get("code_fingerprint") != self.code_fingerprint:
-                continue
+                if not _legacy_fingerprint_allowed(manifest, spec):
+                    continue
             if validate_protocol:
                 provider = self._provider(spec, factory, cache)
                 current_protocol = self._protocol_fingerprint(provider)
