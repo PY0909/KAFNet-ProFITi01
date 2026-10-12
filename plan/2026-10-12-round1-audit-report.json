@@ -1,0 +1,55 @@
+{
+  "status": "pass",
+  "runs": {
+    "round1_fd004_unified_v3c_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "cmapss_fd004",
+      "model_name": "unified"
+    },
+    "round1_metropt3_unified_v3c_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "metropt3",
+      "model_name": "unified"
+    },
+    "round1_tep_tcn_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "tep",
+      "model_name": "tcn"
+    },
+    "round1_tep_gru_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "tep",
+      "model_name": "gru"
+    },
+    "round1_tep_patchtst_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "tep",
+      "model_name": "patchtst"
+    },
+    "round1_tep_timesnet_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "tep",
+      "model_name": "timesnet"
+    },
+    "round1_tep_itransformer_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "tep",
+      "model_name": "itransformer"
+    },
+    "round1_tep_unified_v3c_seed2026": {
+      "status": "pass",
+      "issues": [],
+      "dataset": "tep",
+      "model_name": "unified"
+    }
+  },
+  "cross_run_issues": [],
+  "tep_diagnostic_protocol": "max_runs_per_fault=20 (diagnostic subset)"
+}

@@ -44,3 +44,6 @@ nohup.out
 
 # Legacy local-only preflight artifact (reports now live under result/).
 /autodl-preflight.json
+
+# Local downloaded run logs (evidence copied into plan/ when needed)
+/logs/
