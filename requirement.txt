@@ -1,0 +1,9 @@
+# Dependencies audited from actual imports on 2026-10-12 (code/ + compare_code/).
+# pyreadr is imported lazily by the TEP dataverse loader; pytest is test-only.
+# scikit-learn is intentionally absent: no module imports it.
+torch>=2.5
+numpy
+pandas
+tqdm
+pyreadr
+pytest
