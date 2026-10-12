@@ -152,9 +152,9 @@ PYTHONPATH=code /opt/anaconda3/envs/kaf_profiti/bin/python -m pytest code/tests/
 
 ## 4. Phase B：Git 身份冻结与 GitHub
 
-- [ ] **Phase B 完成：v3c 代码身份已冻结到可追溯分支并推送，数据/结果/指针备份未入库。**
+- [x] **Phase B 完成：v3c 代码身份已冻结到可追溯分支并推送，数据/结果/指针备份未入库。**
 
-> 2026-10-12 执行记录：指针备份（仓库外 `/private/tmp/`）→ `git init -b unified-v3-ch3-seeds` → import 审计版 `requirement.txt`（scikit-learn 无导入、不列入）→ 暂存审查（111 文件，无 dataset/result/备份入索引）→ commit 冻结完成。**push 停在门禁**：github.com 443 直连不通且本机无代理，远端侦察不可达，按规划走独立快照分支兜底（不连通远端历史属预期，已在 progress.md 登记）。待代理可用后：先 `git ls-remote` 复核远端是否已有同名分支，再 `git push -u origin unified-v3-ch3-seeds`，不静默强推。
+> 2026-10-12 执行记录：指针备份（仓库外 `/private/tmp/`）→ `git init -b unified-v3-ch3-seeds` → import 审计版 `requirement.txt`（scikit-learn 无导入、不列入）→ 暂存审查（111 文件，无 dataset/result/备份入索引）→ commit `7391252` 冻结。push 经代理恢复后完成：ls-remote 确认远端仅有 `main`（无同名分支冲突），`git push -u origin unified-v3-ch3-seeds` 建立新分支，复核远端哈希与本地 HEAD 完全一致。本分支为独立快照（与远端 main 历史不连通，属预期兜底）。网络备注：github 直连间歇不可用，本机代理端口 7897（`git -c http.proxy=http://127.0.0.1:7897` 可稳定访问）。
 
 当前 v3 的 `.git` 是失效的服务器 worktree 指针，其分支元数据只存在于 `/home/new_work/kaf_profiti`（RTX 4060 Ti 机器）的 `.git/worktrees` 下；AutoDL 上的 `new_work` 是独立 clone，只包含**已推送到 GitHub 的分支**。因此主路径不是“在 AutoDL 恢复 worktree 分支”，而是：先用 `git ls-remote --heads origin`（可加 `--tags`）检查远端是否已存在与本地代码对应的分支或等价树——存在则比较树 SHA 后从该历史创建 `unified-v3-ch3-seeds`；不存在（含 4060 机器不可达的情形）直接使用下列“独立快照分支”兜底。兜底分支与远端历史不连通属预期行为，须在 Phase F 登记中注明分支来源。备份放在仓库外，避免被 `git add -A` 提交：
 

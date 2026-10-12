@@ -7,6 +7,7 @@
 - 暂存审查：111 文件、21194 行；`dataset/`、`result/`、指针备份均不在索引（check-ignore 验证通过）。
 - commit `e8335cc`（"ch3: freeze unified v3c reproduction snapshot"，265 tests passed）。`git diff --cached --check` 的报警均为 plan 文档中有意的 Markdown 硬换行（行尾双空格），不作为缺陷处理。
 - **push 停在门禁**：github.com 443 直连不通（75s 超时 ×2），本机无代理在监听、无全局 git 代理配置；远端分支侦察（ls-remote）同样不可达，故按规划走"独立快照分支"兜底——该分支与远端历史不连通属预期，已在此登记。待用户开启代理/VPN 后执行 `git push -u origin unified-v3-ch3-seeds` 并复核远端是否已有同名分支（若有，先比较不得静默强推）。
+- **当日续：push 完成，Phase B 关闭**。用户开启代理后（系统级生效；本机代理端口 7897，直连仍间歇超时，git 可用 `-c http.proxy=http://127.0.0.1:7897` 稳定访问）：ls-remote 确认远端仅有 `main`（7af9d58），无同名分支；push 建立新分支 `unified-v3-ch3-seeds`，复核远端哈希与本地 `7391252` 完全一致。
 
 ### 2026-10-12 Round 1 Task A4：provenance 与 TEP 公平性代码改动（TDD 完成）
 
