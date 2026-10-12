@@ -184,7 +184,9 @@ git push -u origin unified-v3-ch3-seeds
 
 ## 5. Phase C：AutoDL 准备
 
-- [ ] **Phase C 完成：远端 commit、环境、数据 SHA、250 tests 和三数据集 GPU smoke 全部通过。**
+- [x] **Phase C 完成：远端 commit、环境、数据 SHA、250 tests 和三数据集 GPU smoke 全部通过。**
+
+> 2026-10-12 执行记录：`/root/autodl-tmp/kaf_v3` clone 至 `812416a`（clean）。环境用实例既有 conda env `kaf_profiti`（Python 3.11.15 + torch 2.5.1+cu124，CUDA 可用），补装 pyreadr/tqdm（pip）与 libiconv（conda-forge；TEP 相关命令需 `LD_LIBRARY_PATH=/root/miniconda3/envs/kaf_profiti/lib` 前缀，跑批脚本已内置 export）。数据**服务器内拷贝**自旧 `new_work/dataset`，对 Mac 侧清单核验 **22/22 SHA-256 一致**（零上传）。全量 pytest **265 passed**（服务器 12.45s）。三数据集 GPU smoke（FD004/MetroPT unified v3c、tcn×TEP max-runs=2）全部断言通过，含 A4 新链路在 GPU 上的端到端验证：manifest provenance 字段齐全、TEP 基线 head=probability、validation-only threshold、event_metrics 与 class weights 均生效。
 
 在 `/root/autodl-tmp/kaf_v3` 独立 clone `unified-v3-ch3-seeds`，不修改旧 `/root/autodl-tmp/new_work`。
 
