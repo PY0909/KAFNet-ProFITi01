@@ -1,5 +1,24 @@
 # Unified Model Reimplementation Progress
 
+### 2026-10-12 Round 1 Phase D–F：八个 seed-2026 诊断 run 全部完成并通过审计
+
+整批 33 分钟（17:16–17:49，3090）；`round1_protocol_audit` **8/8 pass、cross-run issues=0**；结果与日志已下载回本地 `result/`（183M）。单 seed 诊断口径，不构成多 seed 结论。
+
+| run | 关键指标 | 备注 |
+|---|---|---|
+| FD004 unified v3c | MAE 20.648 / RMSE 27.633 / NASA 6668.3 | 对冻结靶 20.16/27.49/8375：MAE 偏 2.4%、RMSE 偏 0.5%（均 ≤5% 复现带）；**NASA 偏 -20.4%（6668 vs 8375，改善方向，超预注册 10% 带）**，归因候选=冻结值产自 12 缺陷整改前代码；待用户裁决 |
+| MetroPT unified v3c | overall MAE 0.7080 / RMSE 2.0899 | **v3c 首个 MetroPT 基线确立**；量级护栏（<2.0）通过；与 V4 冻结 0.485 的差距符合 v3c<v4 预期 |
+| TEP tcn / itransformer / gru / patchtst / timesnet | macro-F1 0.8321 / 0.8203 / 0.8189 / 0.7906 / 0.7804 | **首批 TEP 基线**；BalancedAcc 0.7787–0.8359 |
+| TEP unified v3c | macro-F1 0.7725 / BalancedAcc 0.7787 | 六模型最低（单 seed 诊断）；事件 detR 1.0 |
+
+过程发现与偏差登记：
+
+1. **run 8 AMP 非有限 loss**：unified v3c×TEP×fp16 训练首步 loss 非有限，被"非有限即拒绝"门禁拦截（非 A4 回归：FD004/MetroPT unified 均 AMP 正常）。`--no-amp` 1-epoch 诊断 finite 后以 `--no-amp` 正式重跑成功（协议偏差已登记，AMP 属实现细节非科学超参；原失败日志保留于 `round1_tep_unified_v3c_seed2026.log`）。
+2. **TEP 事件指标结构性饱和**：六模型一致 detection_rate=1.0 / false_alarm_rate=1.0 / delay≈0——当前实现单窗口越限即计整 run 报警，阈值按逐点 F1 选择，~73 窗口/run 下正常 run 必然含超阈窗口。与 2026-10-10 调研『persistence rule 空白』结论互证；诊断指标为本轮有效口径，事件级评价需 persistence/k-of-n 规则（Round 2 或第五章课题）。
+3. 跨 runner 公平性实证：TEP 六模型的 split/normalizer/window SHA、evaluator、TEP 类别权重在 unified 与五基线间完全一致（审计 cross-run 0 issue）。
+
+Round 2 放行状态：工程门禁全部通过；**待决：① FD004 NASA 偏差裁决（选项见当日对话：按字面进失败带核查冻结 manifest（需 4060 机器）/ 接受 post-remediation 基线口径 + Round 2 三 seed 复核 NASA（推荐））；② TEP unified 单 seed 落后是否影响 Round 2 前的 validation-only tuning 范围**。Round 2 前置任务未开始：validation-only tuning、TEP max-runs=0 GPU preflight、54-run 计划文档。
+
 ### 2026-10-12 Round 1 Phase B：git 身份冻结（commit 完成，push 被网络阻断）
 
 - 服务器 worktree 死指针已备份至仓库外 `/private/tmp/kaf_profiti_unified_v3.git.server-pointer.20261012165127.bak`；`git init -b unified-v3-ch3-seeds` + `remote add origin https://github.com/PY0909/KAFNet-ProFITi01.git`。

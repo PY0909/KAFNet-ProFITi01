@@ -198,7 +198,9 @@ git push -u origin unified-v3-ch3-seeds
 
 ## 6. Phase D：Round 1 八个 run
 
-- [ ] **Phase D 完成：8/8 seed-2026 诊断 run 均生成完整 artifact。**
+- [x] **Phase D 完成：8/8 seed-2026 诊断 run 均生成完整 artifact。**
+
+> 2026-10-12 执行记录：整批 33 分钟完成（17:16–17:49）。run 8 首次尝试在训练首步因 AMP 非有限 loss 被工程门禁拦截（v3c×TEP×fp16 特有；--no-amp 诊断性 1-epoch 验证 finite 后，以 --no-amp 正式重跑 50 epochs 成功，偏差已登记；其余 7 run 均默认 AMP）。
 
 所有命令从仓库根执行。Unified 和 comparison 命令均显式提供 `--result-root`；comparison runner 显式设置 `PYTHONPATH`。批处理脚本为每个 run 单独日志，单 run 失败后继续并写入 `summary.log`。
 
@@ -213,7 +215,7 @@ mkdir -p "$OUT" "$LOG"
 
 ### Task D1：FD004 unified v3c（顺序 1）
 
-- [ ] **Task D1 完成：FD004 v3c artifact 已生成。**
+- [x] **Task D1 完成：FD004 v3c artifact 已生成。**
 
 ```bash
 PYTHONPATH="$ROOT/code" "$PYTHON" -u "$ROOT/code/run_unified_experiment.py" \
@@ -228,7 +230,7 @@ PYTHONPATH="$ROOT/code" "$PYTHON" -u "$ROOT/code/run_unified_experiment.py" \
 
 ### Task D2：MetroPT unified v3c（顺序 2）
 
-- [ ] **Task D2 完成：MetroPT v3c artifact 已生成。**
+- [x] **Task D2 完成：MetroPT v3c artifact 已生成。**
 
 ```bash
 PYTHONPATH="$ROOT/code" "$PYTHON" -u "$ROOT/code/run_unified_experiment.py" \
@@ -243,7 +245,7 @@ PYTHONPATH="$ROOT/code" "$PYTHON" -u "$ROOT/code/run_unified_experiment.py" \
 
 ### Task D3：TEP 五个 comparison baseline（顺序 3–7）
 
-- [ ] **Task D3 完成：五个 TEP baseline artifact 均已生成。**
+- [x] **Task D3 完成：五个 TEP baseline artifact 均已生成。**
 
 依赖声明：本 Task 命令中的 `--lr 1e-3` 依赖 Task A4 已为 `compare_code/cli.py` 完成 `--lr` 接线；A4 未完成时本命令会因未知参数直接失败，不得跳过 A4 执行本 Task。
 
@@ -263,7 +265,7 @@ done
 
 ### Task D4：TEP unified v3c（顺序 8）
 
-- [ ] **Task D4 完成：TEP unified v3c artifact 已生成且实际 head 为 probability。**
+- [x] **Task D4 完成：TEP unified v3c artifact 已生成且实际 head 为 probability。**
 
 ```bash
 PYTHONPATH="$ROOT/code" "$PYTHON" -u "$ROOT/code/run_unified_experiment.py" \
@@ -278,7 +280,9 @@ PYTHONPATH="$ROOT/code" "$PYTHON" -u "$ROOT/code/run_unified_experiment.py" \
 
 ## 7. Phase E：八 run 审计门禁
 
-- [ ] **Phase E 完成：8-run artifact、内容 SHA、跨 runner 公平性和 FD004 复现判定全部通过。**
+- [x] **Phase E 完成：8-run artifact、内容 SHA、跨 runner 公平性审计全部通过；FD004 复现判定见 progress.md（MAE/RMSE 复现，NASA 超带改善性偏差待裁决）。**
+
+> 2026-10-12 执行记录：round1_protocol_audit 8/8 pass、cross-run issues=0（TEP 六模型 split/normalizer/window SHA 完全一致、evaluator 统一、provenance 齐全）。审计报告存 logs/round1_v3c_repro_20261012/audit_report.json。TEP 事件指标六模型一致呈现 detection_rate=1.0 / false_alarm_rate=1.0：单窗口越限即计整 run 报警的实现性质（阈值按逐点 F1 选），与 2026-10-10 调研『persistence rule 空白』结论互证；诊断指标（macro-F1/BalancedAcc）为本轮 TEP 有效口径。
 
 新增或扩展 `code/kaf_profiti/experiments/round1_protocol_audit.py`，显式接收 run 目录。它必须检查：
 
@@ -314,6 +318,8 @@ PYTHONPATH="$ROOT/code" "$PYTHON" -m kaf_profiti.experiments.round1_protocol_aud
 ## 8. Phase F：结果归档与 Round 2 放行
 
 - [ ] **Phase F 完成：Round 1 证据已登记，Round 2 的 tuning、TEP 数据规模和 54-run 配置已冻结。**
+
+> 2026-10-12 执行记录：结果与日志已下载回 Mac（result/ 183M，gitignored）。FD004 NASA 偏差裁决与 Round 2 放行待用户决策（见 progress.md）；Round 2 前置（validation-only tuning、TEP max-runs=0 preflight）未开始。
 
 - 下载 manifest、metrics、test_metrics、efficiency、history、checkpoint SHA 和 audit report；不手工修改任何 JSON 指标。
 - 把 run_id、seed、commit SHA、数据 SHA、manifest SHA、判定和未决风险写入 `plan/progress.md`。
